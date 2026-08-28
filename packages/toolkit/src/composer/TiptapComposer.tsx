@@ -388,6 +388,20 @@ export function getComposerPopoverPosition(
   }
 }
 
+export function getComposerPopoverAnchorPosition(
+  view: Pick<EditorView, "coordsAtPos" | "dom">,
+  pos: number,
+): { top: number; left: number; width?: number } | null {
+  const position = getComposerPopoverPosition(view, pos);
+  if (!position) return null;
+  const root = view.dom.closest<HTMLElement>(
+    '[data-agent-composer-slot="root"]',
+  );
+  const rect = root?.getBoundingClientRect();
+  if (!rect || rect.width <= 0) return position;
+  return { top: rect.top, left: rect.left, width: rect.width };
+}
+
 export function displayableComposerModeMessage(options: {
   messagePrefix: string;
   trimmedText: string;
@@ -2233,7 +2247,7 @@ function ModelSelectorSkeleton() {
 
 type PopoverState = {
   type: "@" | "/";
-  position: { top: number; left: number };
+  position: { top: number; left: number; width?: number };
   startPos: number;
   query: string;
 } | null;
@@ -2734,7 +2748,7 @@ export function TiptapComposer({
             from,
           );
           if (from === 1 || textBefore === "" || /\s/.test(textBefore)) {
-            const position = getComposerPopoverPosition(view, from);
+            const position = getComposerPopoverAnchorPosition(view, from);
             if (!position) return false;
             setTimeout(() => {
               const state: PopoverState = {
@@ -2758,7 +2772,7 @@ export function TiptapComposer({
             from,
           );
           if (from === 1 || textBefore === "" || /\s/.test(textBefore)) {
-            const position = getComposerPopoverPosition(view, from);
+            const position = getComposerPopoverAnchorPosition(view, from);
             if (!position) return false;
             setTimeout(() => {
               const state: PopoverState = {

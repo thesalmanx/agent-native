@@ -7,7 +7,6 @@ import {
   IconAlertTriangle,
   IconCircleX,
   IconCheck,
-  IconChevronDown,
   IconChevronRight,
   IconCopy,
   IconCode,
@@ -16,8 +15,6 @@ import {
   IconDatabase,
   IconSearch,
   IconFileCode,
-  IconShieldCheck,
-  IconX,
 } from "@tabler/icons-react";
 import React, {
   useState,
@@ -36,12 +33,6 @@ import type { AgentMcpAppPayload } from "../../mcp-client/app-result.js";
 import { formatAgentChatContextItemsForPrompt } from "../agent-chat.js";
 import { AgentTaskCard } from "../AgentTaskCard.js";
 import { writeClipboardText } from "../clipboard.js";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "../components/ui/dropdown-menu.js";
 import {
   Popover,
   PopoverContent,
@@ -69,6 +60,7 @@ import {
 import { useAgentChatContext } from "../use-agent-chat-context.js";
 import { cn } from "../utils.js";
 import { ActionChatUiSurface } from "./action-chat-ui-surface.js";
+import { AgentApprovalCard } from "./agent-approval-card.js";
 import {
   SmoothMarkdownText,
   HighlightedCodeBlock,
@@ -639,17 +631,21 @@ function ApprovalAffordance({
     }
   };
   return (
-    <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-2 rounded-md border border-border bg-muted/40 px-2.5 py-1.5">
-      <IconShieldCheck className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-      <span className="min-w-0 flex-1 text-xs text-muted-foreground">
-        {t("agentChat.approval.question", { tool: toolName })}
-      </span>
-      {ctx && (
-        <div className="inline-flex shrink-0 items-stretch">
-          <button
-            type="button"
-            disabled={isAlwaysAllowing}
-            onClick={() => {
+    <AgentApprovalCard
+      toolName={toolName}
+      question={t("agentChat.approval.question", { tool: toolName })}
+      approveLabel={t("agentChat.approval.approve")}
+      denyLabel={t("agentChat.approval.deny")}
+      moreOptionsLabel={t("agentChat.approval.moreOptions")}
+      alwaysAllowLabel={t("agentChat.approval.alwaysAllowAction")}
+      alwaysAllowHint={t("agentChat.approval.alwaysAllowActionHint")}
+      saveFailedLabel={
+        alwaysAllowFailed ? t("agentChat.common.saveFailed") : undefined
+      }
+      isAlwaysAllowing={isAlwaysAllowing}
+      onApprove={
+        ctx
+          ? () => {
               setLocalResolution("approved");
               ctx.onApprovalResolved?.(
                 approval.approvalKey,
@@ -658,74 +654,21 @@ function ApprovalAffordance({
                 approval.askId,
               );
               ctx.onApprove(approval.approvalKey);
-            }}
-            className={cn(
-              "inline-flex shrink-0 items-center gap-1 px-2.5 py-1 text-xs font-medium transition-colors",
-              "bg-foreground text-background hover:bg-foreground/90",
-              onAlwaysAllow ? "rounded-s-md rounded-e-none" : "rounded-md",
-              "disabled:pointer-events-none disabled:opacity-50",
-            )}
-          >
-            <IconCheck className="h-3.5 w-3.5" />
-            {t("agentChat.approval.approve")}
-          </button>
-          {onAlwaysAllow && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  disabled={isAlwaysAllowing}
-                  aria-label={t("agentChat.approval.moreOptions")}
-                  title={t("agentChat.approval.moreOptions")}
-                  className={cn(
-                    "inline-flex w-7 shrink-0 items-center justify-center rounded-s-none rounded-e-md border-s border-background/25 bg-foreground text-background transition-colors hover:bg-foreground/90",
-                    "disabled:pointer-events-none disabled:opacity-50",
-                  )}
-                >
-                  <IconChevronDown className="h-3.5 w-3.5" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  onSelect={() => void handleAlwaysAllow()}
-                  title={t("agentChat.approval.alwaysAllowActionHint")}
-                >
-                  <IconShieldCheck className="h-4 w-4" />
-                  {t("agentChat.approval.alwaysAllowAction")}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-        </div>
-      )}
-      <button
-        type="button"
-        disabled={isAlwaysAllowing}
-        onClick={() => {
-          setLocalResolution("denied");
-          ctx?.onApprovalResolved?.(
-            approval.approvalKey,
-            "denied",
-            toolCallId,
-            approval.askId,
-          );
-          ctx?.onDeny?.(approval.approvalKey);
-        }}
-        className={cn(
-          "inline-flex shrink-0 items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs font-medium transition-colors",
-          "text-foreground hover:bg-muted",
-          "disabled:pointer-events-none disabled:opacity-50",
-        )}
-      >
-        <IconX className="h-3.5 w-3.5" />
-        {t("agentChat.approval.deny")}
-      </button>
-      {alwaysAllowFailed && (
-        <span role="alert" className="basis-full text-xs text-destructive">
-          {t("agentChat.common.saveFailed")}
-        </span>
-      )}
-    </div>
+            }
+          : undefined
+      }
+      onDeny={() => {
+        setLocalResolution("denied");
+        ctx?.onApprovalResolved?.(
+          approval.approvalKey,
+          "denied",
+          toolCallId,
+          approval.askId,
+        );
+        ctx?.onDeny?.(approval.approvalKey);
+      }}
+      onAlwaysAllow={onAlwaysAllow ? handleAlwaysAllow : undefined}
+    />
   );
 }
 
@@ -1058,6 +1001,7 @@ function ToolCallDisplayGeneric({
     return (
       <AgentCallCell
         agentName={agentName ?? t("agentChat.common.agent")}
+        toolCallId={toolCallId}
         activity={agentActivity}
         progress={agentProgress}
         responseText={agentStreamText}
@@ -1187,6 +1131,7 @@ function ToolCallDisplayGeneric({
 
 function AgentCallCell({
   agentName,
+  toolCallId,
   activity,
   progress,
   responseText,
@@ -1195,6 +1140,7 @@ function AgentCallCell({
   durationMs,
 }: {
   agentName: string;
+  toolCallId?: string;
   activity?: A2AAgentActivitySnapshot;
   progress?: AgentCallProgress;
   responseText: string;
@@ -1205,6 +1151,7 @@ function AgentCallCell({
   const t = useT();
   const formatDuration = useLocalizedWorkedDuration();
   const [open, setOpen] = useState(true);
+  const responseKey = toolCallId ?? agentName;
   const toolCount = activity?.toolCalls?.length ?? 0;
   // Response segments are ordered against the tool calls that preceded them, so
   // they render in the timeline where the remote agent actually said them.
@@ -1256,7 +1203,7 @@ function AgentCallCell({
                     activity?.activePhase === "responding" &&
                     index === inlineSegments.length - 1
                   }
-                  resetKey={`agent-response-${agentName}-${index}`}
+                  resetKey={`agent-response-${responseKey}-${index}`}
                   statusType={isRunning ? "running" : "complete"}
                 />
               </div>
@@ -1337,7 +1284,7 @@ function AgentCallCell({
               <SmoothMarkdownText
                 text={finalText}
                 streaming={isRunning}
-                resetKey={`agent-response-${agentName}`}
+                resetKey={`agent-response-${responseKey}`}
                 statusType={isRunning ? "running" : "complete"}
               />
             </div>

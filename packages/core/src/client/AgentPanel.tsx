@@ -60,6 +60,8 @@ import {
   type HostedHarnessRuntime,
 } from "../agent/harness/hosted.js";
 import type { AgentRun } from "../progress/types.js";
+import { AgentActivityTraceDemo } from "./chat/agent-activity-trace-demo.js";
+import { AgentApprovalCardDemo } from "./chat/agent-approval-card-demo.js";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -960,6 +962,16 @@ function AgentPanelInner({
   const t = useT();
   const navigate = useNavigate();
   const location = useLocation();
+  const showActivityDemo =
+    typeof window !== "undefined" &&
+    (window.location.hostname === "localhost" ||
+      window.location.hostname === "127.0.0.1") &&
+    new URLSearchParams(location.search).get("agent-demo") === "complex";
+  const showApprovalDemo =
+    typeof window !== "undefined" &&
+    (window.location.hostname === "localhost" ||
+      window.location.hostname === "127.0.0.1") &&
+    new URLSearchParams(location.search).get("agent-demo") === "approval";
   const mounted = useClientOnly();
   const onboardingPreviewMode = useOnboardingPreviewMode();
   const firstRunOnboardingGateOwnsSurface =
@@ -2266,18 +2278,12 @@ function AgentPanelInner({
         }}
         data-agent-fullscreen={isFullscreen ? "true" : undefined}
       >
-        {/* Tailwind group-hover/tab doesn't work in core package — inject directly.
-          Fullscreen rules center the message stream and composer to a Claude-style
+        {/* Fullscreen rules center the message stream and composer to a Claude-style
           column while leaving the header bar at full width so the action buttons
           stay pinned to the top corners. */}
         <style
           dangerouslySetInnerHTML={{
             __html:
-              "@media (hover:hover) and (pointer:fine){" +
-              ".agent-sidebar-chat-header[data-agent-sidebar-chat-header]{opacity:0;pointer-events:none;transition:opacity 150ms ease-out;}" +
-              ".agent-panel-root:hover .agent-sidebar-chat-header[data-agent-sidebar-chat-header],.agent-panel-root:focus-within .agent-sidebar-chat-header[data-agent-sidebar-chat-header],.agent-sidebar-chat-header[data-agent-sidebar-chat-header][data-agent-sidebar-chat-header-active]{opacity:1;pointer-events:auto;}" +
-              ".agent-sidebar-panel[data-agent-sidebar-per-app-chat='true'] .agent-sidebar-chat-header[data-agent-sidebar-chat-header]{opacity:1;pointer-events:auto;transition:none;}" +
-              "}" +
               ".agent-tab-close{opacity:0}.agent-tab:hover .agent-tab-close{opacity:1}" +
               ".agent-tabs-scroll{scrollbar-width:none;-ms-overflow-style:none;}" +
               ".agent-tabs-scroll::-webkit-scrollbar{display:none;}" +
@@ -2344,34 +2350,41 @@ function AgentPanelInner({
                 />
               }
             >
-              <MultiTabAssistantChatLazy
-                {...assistantChatProps}
-                agentChatSurface={effectiveAgentChatSurface}
-                apiUrl={apiUrl}
-                showHeader={false}
-                renderHeader={showHeader ? renderChatHeader : undefined}
-                showTabBar={showTabBar}
-                renderOverlay={
-                  showPageNewChatButton && !showHeader
-                    ? renderPageChatOverlay
-                    : undefined
-                }
-                contentHidden={mode !== "chat"}
-                emptyStateText={emptyStateText}
-                emptyStateAddon={emptyStateAddon}
-                suggestions={suggestions}
-                dynamicSuggestions={dynamicSuggestions}
-                onSwitchToCli={() => switchMode("cli")}
-                execMode={execMode}
-                onExecModeChange={switchExecMode}
-                storageKey={storageKey}
-                restoreActiveThread={restoreActiveThread}
-                scope={scope}
-                isolateHistoryByScope={isolateHistoryByScope}
-                showScopeBadge={showScopeBadge}
-                browserTabId={browserTabId}
-                threadUrlSync={threadUrlSync}
-              />
+              {showActivityDemo ? (
+                <AgentActivityTraceDemo />
+              ) : showApprovalDemo ? (
+                <AgentApprovalCardDemo />
+              ) : (
+                <MultiTabAssistantChatLazy
+                  {...assistantChatProps}
+                  agentChatSurface={effectiveAgentChatSurface}
+                  apiUrl={apiUrl}
+                  showHeader={false}
+                  renderHeader={showHeader ? renderChatHeader : undefined}
+                  showTabBar={showTabBar}
+                  renderOverlay={
+                    showPageNewChatButton && !showHeader
+                      ? renderPageChatOverlay
+                      : undefined
+                  }
+                  contentHidden={mode !== "chat"}
+                  emptyStateText={emptyStateText}
+                  emptyStateAddon={emptyStateAddon}
+                  suggestions={suggestions}
+                  dynamicSuggestions={dynamicSuggestions}
+                  suggestionPlacement="context-chips"
+                  onSwitchToCli={() => switchMode("cli")}
+                  execMode={execMode}
+                  onExecModeChange={switchExecMode}
+                  storageKey={storageKey}
+                  restoreActiveThread={restoreActiveThread}
+                  scope={scope}
+                  isolateHistoryByScope={isolateHistoryByScope}
+                  showScopeBadge={showScopeBadge}
+                  browserTabId={browserTabId}
+                  threadUrlSync={threadUrlSync}
+                />
+              )}
             </Suspense>
           )}
         </div>
@@ -3104,8 +3117,8 @@ export interface AgentSidebarProps {
   enabled?: boolean;
   /** Placeholder text for the empty chat state */
   emptyStateText?: string;
-  /** Suggestion prompts shown when no messages */
-  suggestions?: string[];
+  /** Static or agent-authored next actions shown at the base of the chat. */
+  suggestions?: AssistantChatProps["suggestions"];
   /** Context-aware suggestions merged with `suggestions`. Enabled by default. */
   dynamicSuggestions?: AssistantChatProps["dynamicSuggestions"];
   /** Optional controls rendered in the chat composer toolbar. */
@@ -4047,6 +4060,7 @@ export function AgentSidebar({
             emptyStateText={emptyStateText}
             suggestions={suggestions}
             dynamicSuggestions={dynamicSuggestions}
+            suggestionPlacement="context-chips"
             composerToolbarSlot={composerToolbarSlot}
             composerSlot={composerSlot}
             onComposerTextChange={onComposerTextChange}

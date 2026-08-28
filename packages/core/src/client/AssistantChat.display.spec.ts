@@ -41,6 +41,7 @@ import {
   matchesUserStoppedRun,
   reconnectActivityFallbackContent,
   reconnectProgressTimedOut,
+  resolveAssistantChatSuggestionInputs,
   resolveAssistantChatRunningState,
   resolveAssistantChatRunningStatusLabel,
   resolveAssistantChatComposerPlaceholder,
@@ -54,6 +55,35 @@ import {
   useAutoResumeStatus,
   waitForThreadRunToClear,
 } from "./AssistantChat.js";
+
+describe("resolveAssistantChatSuggestionInputs", () => {
+  it("preserves structured agent-authored actions while merging dynamic prompts", () => {
+    const authored = {
+      id: "review",
+      label: "Review changes",
+      prompt: "Review the changes in detail",
+      metadata: { source: "agent" },
+    } as const;
+
+    expect(
+      resolveAssistantChatSuggestionInputs(
+        ["Review the changes in detail", "Explain this screen"],
+        [authored],
+      ),
+    ).toEqual([authored, "Explain this screen"]);
+  });
+});
+
+describe("message branch controls", () => {
+  it("does not expose unsupported alternate-response navigation", () => {
+    const source = readFileSync("src/client/chat/message-components.tsx", {
+      encoding: "utf8",
+    });
+
+    expect(source).not.toContain("BranchPickerPrimitive");
+    expect(source).not.toContain("MessageBranchPicker");
+  });
+});
 
 describe("shouldShowAssistantChatModelSelector", () => {
   it("keeps the framework selector by default and lets hosts replace only its visual control", () => {
@@ -2021,7 +2051,7 @@ describe("resolveAssistantChatRunningStatusLabel", () => {
 describe("resolveAssistantChatComposerPlaceholder", () => {
   it("provides a clear default for shared chat composers", () => {
     expect(resolveAssistantChatComposerPlaceholder(undefined)).toBe(
-      "Write a message...",
+      "Ask the agent to explore, build, or explain…",
     );
   });
 

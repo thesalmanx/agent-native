@@ -1,7 +1,7 @@
 // Owns: message-timestamp helpers, SelectionAttachedPill, UserMessage,
-// AssistantMessage, MessageBranchPicker, CheckpointContext, MessageActionsContext,
-// UserStoppedRunContext, RunningActivityStatus, ThinkingIndicator, and
-// displayableUserMessageText.
+// AssistantMessage, AssistantMessageActionBar,
+// CheckpointContext, MessageActionsContext, UserStoppedRunContext,
+// RunningActivityStatus, ThinkingIndicator, and displayableUserMessageText.
 
 import { isPastedTextAttachmentName } from "@agent-native/toolkit/composer/pasted-text";
 import { PastedTextChip } from "@agent-native/toolkit/composer/PastedTextChip";
@@ -11,7 +11,6 @@ import {
   useComposer,
   MessagePrimitive,
   ActionBarPrimitive,
-  BranchPickerPrimitive,
   ComposerPrimitive,
   useMessagePartReasoning,
   useMessagePartRuntime,
@@ -23,7 +22,6 @@ import {
   IconCheck,
   IconCopy,
   IconChevronDown,
-  IconChevronLeft,
   IconChevronRight,
   IconDots,
   IconGitFork,
@@ -91,6 +89,10 @@ import {
 } from "../tool-display.js";
 import { cn } from "../utils.js";
 import {
+  AgentActivityTrace,
+  type AgentActivityItem,
+} from "./agent-activity-trace.js";
+import {
   MarkdownText,
   renderMarkdownToClipboardHtml,
   SmoothMarkdownText,
@@ -115,7 +117,6 @@ import {
   ReasoningCell,
   RanToolsSummary,
   useLocalizedWorkedDuration,
-  WorkedForSummary,
   toolCallHasPendingApproval,
 } from "./tool-call-display.js";
 
@@ -153,7 +154,7 @@ export function isHiddenUserMessage(message: unknown): boolean {
 
 // ─── Message timestamp helpers ────────────────────────────────────────────────
 
-interface FormattedMessageTimestamp {
+export interface FormattedMessageTimestamp {
   short: string;
   full: string;
 }
@@ -244,6 +245,128 @@ export function MessageTimestamp({
     >
       {timestamp.short}
     </span>
+  );
+}
+
+function MessageActionButton({
+  label,
+  onClick,
+  children,
+  className,
+}: {
+  label: string;
+  onClick: () => void;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          aria-label={label}
+          onClick={onClick}
+          className={cn(
+            "flex size-6 items-center justify-center rounded-md text-muted-foreground/75 transition-colors duration-150 hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+            className,
+          )}
+        >
+          {children}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="text-xs">
+        {label}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+export interface AssistantMessageActionBarProps {
+  timestamp?: FormattedMessageTimestamp | null;
+  threadId: string;
+  runId: string;
+  messageSeq: number;
+  onFork?: () => void | boolean | Promise<void | boolean>;
+  onRestore?: () => void;
+  className?: string;
+}
+
+/** Compact, hover-revealed actions for a completed assistant response. */
+export function AssistantMessageActionBar({
+  timestamp,
+  threadId,
+  runId,
+  messageSeq,
+  onFork,
+  onRestore,
+  className,
+}: AssistantMessageActionBarProps) {
+  const t = useT();
+  const messageRuntime = useMessageRuntime();
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(() => {
+    const message = messageRuntime.getState();
+    const text = message.content
+      .filter((part) => part.type === "text")
+      .map((part) => (part as { text: string }).text)
+      .join("\n");
+    const html = renderMarkdownToClipboardHtml(text);
+    void writeClipboardText(text, html ? { html } : undefined).then((ok) => {
+      if (!ok) return;
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1000);
+    });
+  }, [messageRuntime]);
+
+  return (
+    <TooltipProvider delayDuration={400}>
+      <div
+        className={cn(
+          "pointer-events-none inline-flex items-center gap-0.5",
+          messageFooterFadeClassName,
+          "group-hover:pointer-events-auto group-focus-within:pointer-events-auto",
+          className,
+        )}
+      >
+        <MessageActionButton
+          label={
+            copied
+              ? t("agentChat.common.copied")
+              : t("agentChat.message.copyMessage")
+          }
+          onClick={handleCopy}
+        >
+          {copied ? (
+            <IconCheck className="size-4" />
+          ) : (
+            <IconCopy className="size-4" />
+          )}
+        </MessageActionButton>
+        <ThumbsFeedback
+          threadId={threadId}
+          runId={runId}
+          messageSeq={messageSeq}
+        />
+        {onFork && (
+          <MessageActionButton
+            label={t("agentChat.message.forkChat")}
+            onClick={() => void onFork()}
+          >
+            <IconGitFork className="size-4" />
+          </MessageActionButton>
+        )}
+        {onRestore && (
+          <MessageActionButton
+            label={t("agentChat.message.revertHere")}
+            onClick={onRestore}
+          >
+            <IconArrowBackUp className="size-4" />
+          </MessageActionButton>
+        )}
+        {timestamp && <MessageTimestamp timestamp={timestamp} />}
+      </div>
+    </TooltipProvider>
   );
 }
 
@@ -426,42 +549,6 @@ export function resolveAssistantRequestId(
   return (
     assistantMessageRunId(message) ||
     (activeRun?.threadId === threadId ? activeRun.runId : undefined)
-  );
-}
-
-// ─── MessageBranchPicker ──────────────────────────────────────────────────────
-
-export function MessageBranchPicker() {
-  const t = useT();
-  return (
-    <BranchPickerPrimitive.Root
-      hideWhenSingleBranch
-      className="flex items-center gap-0.5 text-[11px] text-muted-foreground"
-    >
-      <BranchPickerPrimitive.Previous asChild>
-        <button
-          type="button"
-          aria-label={t("agentChat.message.previousBranch")}
-          className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground/70 transition-colors duration-150 hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          <IconChevronLeft className="h-3.5 w-3.5" />
-        </button>
-      </BranchPickerPrimitive.Previous>
-      <span className="tabular-nums select-none">
-        <BranchPickerPrimitive.Number />
-        {"/"}
-        <BranchPickerPrimitive.Count />
-      </span>
-      <BranchPickerPrimitive.Next asChild>
-        <button
-          type="button"
-          aria-label={t("agentChat.message.nextBranch")}
-          className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground/70 transition-colors duration-150 hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          <IconChevronRight className="h-3.5 w-3.5" />
-        </button>
-      </BranchPickerPrimitive.Next>
-    </BranchPickerPrimitive.Root>
   );
 }
 
@@ -872,6 +959,7 @@ export function UserMessage() {
   const locale = useOptionalLocale()?.locale ?? DEFAULT_LOCALE;
   const [expanded, setExpanded] = useState(false);
   const [isExpandable, setIsExpandable] = useState(false);
+  const [copied, setCopied] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const messageRuntime = useMessageRuntime();
   const message = messageRuntime.getState();
@@ -891,6 +979,18 @@ export function UserMessage() {
       })
       .some((part) => displayableUserMessageText(part.text).length > 0) ??
       false);
+
+  const handleCopyMessage = useCallback(() => {
+    const currentMessage = messageRuntime.getState();
+    const text = displayableUserMessageText(
+      messageTextFromContent(currentMessage.content),
+    );
+    void writeClipboardText(text).then((ok) => {
+      if (!ok) return;
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1000);
+    });
+  }, [messageRuntime]);
 
   useEffect(() => {
     const el = contentRef.current;
@@ -1002,15 +1102,36 @@ export function UserMessage() {
               : t("agentChat.common.expand")}
           </button>
         )}
-        <div className="mt-1 flex items-center justify-end gap-1">
-          <MessageBranchPicker />
-          {timestamp && (
-            <MessageTimestamp
-              timestamp={timestamp}
-              className={messageFooterFadeClassName}
-            />
-          )}
-        </div>
+        <TooltipProvider delayDuration={400}>
+          <div className="mt-1 flex items-center justify-end gap-1">
+            {timestamp && (
+              <MessageTimestamp
+                timestamp={timestamp}
+                className={messageFooterFadeClassName}
+              />
+            )}
+            {hasDisplayableText && (
+              <MessageActionButton
+                label={
+                  copied
+                    ? t("agentChat.common.copied")
+                    : t("agentChat.message.copyMessage")
+                }
+                onClick={handleCopyMessage}
+                className={cn(
+                  messageFooterFadeClassName,
+                  "pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto",
+                )}
+              >
+                {copied ? (
+                  <IconCheck className="size-4" />
+                ) : (
+                  <IconCopy className="size-4" />
+                )}
+              </MessageActionButton>
+            )}
+          </div>
+        </TooltipProvider>
       </div>
     </div>
   );
@@ -1572,6 +1693,40 @@ export interface AssistantWorkPart {
   chatUI?: unknown;
   mcpApp?: unknown;
   approval?: { approvalKey?: string; dismissed?: boolean };
+  status?: { type?: string };
+  structuredMeta?: Record<string, unknown>;
+}
+
+function assistantActivityItem(
+  part: AssistantWorkPart,
+  index: number,
+  isLast: boolean,
+): AgentActivityItem {
+  if (part.type === "reasoning") {
+    return {
+      id: `reasoning-${index}`,
+      label: "Reasoning",
+      variant: "reasoning",
+      status: isLast ? "running" : "complete",
+    };
+  }
+  const toolName = part.toolName ?? "agent action";
+  const kind = String(part.structuredMeta?.toolKind ?? "").toLowerCase();
+  const normalizedName = toolName.toLowerCase();
+  const variant =
+    kind === "edit" || kind === "write" || kind === "bash"
+      ? "coding"
+      : normalizedName.includes("search") ||
+          normalizedName.includes("browse") ||
+          normalizedName.includes("fetch")
+        ? "search"
+        : "steps";
+  return {
+    id: part.toolCallId ?? `tool-${index}`,
+    label: toolName.replace(/[-_]+/g, " "),
+    variant,
+    status: isLast ? "running" : "complete",
+  };
 }
 
 export function groupAssistantWorkParts(
@@ -1716,6 +1871,7 @@ function MissingFinalResponseNotice({
 
 export function AssistantMessage() {
   const t = useT();
+  const formatDuration = useLocalizedWorkedDuration();
   const locale = useOptionalLocale()?.locale ?? DEFAULT_LOCALE;
   const [restoreState, setRestoreState] = useState<
     "idle" | "confirming" | "restoring" | "error"
@@ -1896,16 +2052,6 @@ export function AssistantMessage() {
     }
   }, [chatRunning, isLast, capturedDurationMs, lastRunDurationMs]);
 
-  // Animate collapse only when this message just finished running in-session.
-  const wasRunningRef = useRef(false);
-  const [animateCollapse, setAnimateCollapse] = useState(false);
-  useEffect(() => {
-    if (wasRunningRef.current && !chatRunning && isComplete && isLast) {
-      setAnimateCollapse(true);
-    }
-    wasRunningRef.current = chatRunning && isLast;
-  }, [chatRunning, isComplete, isLast]);
-
   const handleRestore = useCallback(async () => {
     if (restoreState === "idle" || restoreState === "error") {
       setRestoreError(null);
@@ -2031,18 +2177,43 @@ export function AssistantMessage() {
                     chatRunning,
                   });
                   if (!showSummary) return <>{children}</>;
+                  const durationMs = getAssistantWorkSummaryDurationMs(
+                    capturedDurationMs ?? persistedDurationMs,
+                    part.indices[0] ?? -1,
+                    firstWorkPartIndex,
+                  );
+                  const summary =
+                    durationMs != null && durationMs >= 1000
+                      ? t("agentChat.tool.workedFor", {
+                          duration: formatDuration(durationMs),
+                        })
+                      : t("agentChat.tool.worked");
                   return (
-                    <WorkedForSummary
-                      durationMs={getAssistantWorkSummaryDurationMs(
-                        capturedDurationMs ?? persistedDurationMs,
-                        part.indices[0] ?? -1,
-                        firstWorkPartIndex,
-                      )}
+                    <AgentActivityTrace
+                      items={part.indices
+                        .map((index, itemIndex) => {
+                          const workPart = Array.isArray(msgContent)
+                            ? msgContent[index]
+                            : undefined;
+                          if (!workPart) return null;
+                          return assistantActivityItem(
+                            workPart,
+                            index,
+                            chatRunning &&
+                              itemIndex === part.indices.length - 1,
+                          );
+                        })
+                        .filter(
+                          (item): item is AgentActivityItem => item !== null,
+                        )}
+                      summary={summary}
+                      activeSummary={t("agentChat.status.working")}
+                      running={chatRunning}
+                      variant={hasCodeAgentTools ? "coding" : "steps"}
                       defaultOpen={hasCustomUi}
-                      autoCollapse={animateCollapse && !hasCustomUi}
                     >
                       {children}
-                    </WorkedForSummary>
+                    </AgentActivityTrace>
                   );
                 }
                 case "group-ran-tools":
@@ -2131,42 +2302,17 @@ export function AssistantMessage() {
         )}
       </div>
       {isComplete && (
-        <div className="mt-1 flex items-center justify-between">
-          <div className="flex min-w-0 items-center gap-1">
-            <MessageActionsMenu
-              showRevert={showRestore && restoreState === "idle"}
-              onRevert={handleRestore}
-              threadId={cpCtx?.threadId ?? ""}
-            />
-            {/* Regenerate button — only on the last assistant message, auto-disabled while running */}
-            {isLast && (
-              <TooltipProvider delayDuration={400}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <ActionBarPrimitive.Reload asChild>
-                      <button
-                        type="button"
-                        aria-label={t("agentChat.message.regenerate")}
-                        className={`flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground/70 hover:bg-accent hover:text-foreground ${messageFooterFadeClassName} disabled:cursor-not-allowed disabled:opacity-40`}
-                      >
-                        <IconRefresh className="h-3.5 w-3.5" />
-                      </button>
-                    </ActionBarPrimitive.Reload>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="text-xs">
-                    {t("agentChat.message.regenerate")}
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
-            <MessageBranchPicker />
-            {timestamp && (
-              <MessageTimestamp
-                timestamp={timestamp}
-                className={messageFooterFadeClassName}
-              />
-            )}
-          </div>
+        <div className="mt-1 flex items-center gap-1">
+          <AssistantMessageActionBar
+            timestamp={timestamp}
+            threadId={cpCtx?.threadId ?? ""}
+            runId={messageRunId ?? ""}
+            messageSeq={msg.index}
+            onFork={messageActions?.onForkChat}
+            onRestore={
+              showRestore && restoreState === "idle" ? handleRestore : undefined
+            }
+          />
           {showRestore && restoreState === "confirming" ? (
             <div className="flex items-center gap-1 text-xs">
               <button
@@ -2198,13 +2344,7 @@ export function AssistantMessage() {
                 {t("agentChat.common.dismiss")}
               </button>
             </span>
-          ) : (
-            <ThumbsFeedback
-              threadId={cpCtx?.threadId ?? ""}
-              runId={messageRunId ?? ""}
-              messageSeq={msg.index}
-            />
-          )}
+          ) : null}
         </div>
       )}
     </div>

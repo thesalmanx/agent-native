@@ -153,6 +153,143 @@
   background: inherit;
 }
 
+/* The agent rail is a working surface, not a second copy of the app canvas.
+   Keep its depth legible while leaving the product's semantic palette in
+   charge of the actual colors. */
+.agent-sidebar-panel[data-agent-sidebar-layout="desktop"] {
+  border-inline-start: 1px solid hsl(var(--border) / 0.72);
+  background: color-mix(
+    in srgb,
+    hsl(var(--background)) 96%,
+    hsl(var(--foreground)) 4%
+  );
+}
+
+.agent-sidebar-panel .agent-sidebar-chat-header {
+  border-bottom: 1px solid hsl(var(--border) / 0.72);
+  background: hsl(var(--background));
+}
+
+/* Tabs should read as part of the panel's navigation, not as a second window
+   chrome. The active tab gets its own quiet surface and border; inactive tabs
+   stay close to the panel background until hovered. */
+.agent-sidebar-panel .agent-sidebar-chat-header .agent-native-shell-topbar {
+  background: transparent;
+}
+
+.agent-sidebar-panel .agent-tabs-scroll {
+  gap: 0.125rem;
+  padding: 0.25rem;
+}
+
+.agent-sidebar-panel .agent-tab {
+  border: 1px solid transparent;
+  border-radius: 0.5rem;
+  padding-block: 0.375rem;
+  transition:
+    border-color 150ms ease-out,
+    background-color 150ms ease-out,
+    color 150ms ease-out;
+}
+
+.agent-sidebar-panel .agent-tab:not(.bg-accent):hover {
+  background: hsl(var(--muted) / 0.65) !important;
+  color: hsl(var(--foreground));
+}
+
+.agent-sidebar-panel .agent-tab.bg-accent {
+  border-color: hsl(var(--border));
+  background: hsl(var(--background)) !important;
+  box-shadow: 0 1px 2px hsl(var(--foreground) / 0.06);
+  color: hsl(var(--foreground));
+}
+
+.agent-sidebar-panel .agent-chat-scroll {
+  background: hsl(var(--background));
+}
+
+.agent-streaming-cursor {
+  display: inline-block;
+  width: 0.1em;
+  height: 1em;
+  margin-inline-start: 0.15em;
+  transform: translateY(0.15em);
+  border-radius: 999px;
+  background: currentColor;
+  animation: agent-streaming-cursor-blink 900ms ease-in-out infinite;
+}
+
+@keyframes agent-streaming-cursor-blink {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  55%,
+  100% {
+    opacity: 0.25;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-streaming-cursor {
+    animation: none;
+  }
+}
+
+.agent-sidebar-panel .agent-empty-state {
+  align-items: stretch;
+  justify-content: flex-end;
+  padding: 1.25rem 1rem 1.5rem;
+}
+
+.agent-sidebar-panel .agent-empty-state > svg {
+  align-self: center;
+  margin-bottom: 0.25rem;
+  color: hsl(var(--muted-foreground) / 0.46);
+}
+
+.agent-sidebar-panel .agent-composer-area:not(.agent-composer-area--hero) {
+  padding: 0.625rem 0.75rem 0.75rem;
+  border-top: 0;
+  background: transparent;
+}
+
+.agent-sidebar-panel .agent-composer-root:not(.agent-composer-root--hero) {
+  border-radius: 0.875rem;
+  border-color: hsl(var(--border) / 0.9);
+  background: hsl(var(--background));
+  box-shadow:
+    0 6px 20px hsl(var(--foreground) / 0.07),
+    0 1px 2px hsl(var(--foreground) / 0.04);
+}
+
+.agent-sidebar-panel .agent-composer-stack {
+  background: hsl(var(--background));
+}
+
+.agent-sidebar-panel [data-agent-suggestion-bar="true"] {
+  background: hsl(var(--background));
+}
+
+.agent-sidebar-panel .agent-composer-workflow {
+  border-top: 0;
+  background: transparent;
+}
+
+.agent-sidebar-panel .agent-composer-workflow .agent-composer-area {
+  border-top: 0;
+  background: transparent;
+}
+
+.agent-sidebar-panel [data-agent-message-queue-variant="recessed"] {
+  width: calc(100% - 2.5rem);
+}
+
+.agent-sidebar-panel
+  [data-agent-message-queue-variant="recessed"][data-empty="false"] {
+  margin-bottom: -1.25rem;
+}
+
 /* The mask is declared unconditionally and the fade is driven by its size
    variable. Adding/removing a mask changes the element's paint properties, and
    the `--top-fade` modifier flips with `hasContentAbove` — which oscillates
@@ -986,6 +1123,13 @@
   padding-block: 0.5rem;
 }
 
+[data-agent-fullscreen="true"]
+  .agent-composer-stack
+  [data-agent-message-queue="true"] {
+  max-width: calc(750px - 1.5rem);
+  margin-inline: auto;
+}
+
 .agent-composer-area--attached-above {
   padding-top: 0 !important;
 }
@@ -1018,11 +1162,11 @@
 }
 
 .agent-composer-root--hero {
-  min-height: 5.625rem;
-  border-radius: 1rem;
+  min-height: 4.75rem;
+  border-radius: 1.25rem;
   border-color: hsl(var(--border) / 0.75);
-  background: hsl(var(--muted) / 0.62);
-  box-shadow: none;
+  background: hsl(var(--card));
+  box-shadow: 0 8px 30px hsl(var(--foreground) / 0.06);
 }
 
 .agent-composer-root--hero:focus-within {
@@ -1031,14 +1175,30 @@
 }
 
 .agent-composer-root--hero [data-agent-composer-slot="editor-wrap"] {
-  padding-inline: 0.775rem;
-  padding-top: 0.675rem;
+  padding-inline: 1rem;
+  padding-top: 0.75rem;
 }
 
 .agent-composer-root--hero [data-agent-composer-slot="editor-input"] {
-  min-height: 3rem;
+  min-height: 2.5rem;
   font-size: 1rem;
-  line-height: 1.75rem;
+  line-height: 1.5rem;
+}
+
+.agent-composer-root--hero .agent-composer-toolbar {
+  padding-inline: 1rem;
+  padding-bottom: 0.625rem;
+}
+
+.agent-composer-root--hero .agent-composer-send-button {
+  height: 2rem;
+  width: 2rem;
+  border-radius: 999px;
+}
+
+.agent-composer-root:not(.agent-composer-root--hero)
+  .agent-composer-send-button {
+  border-radius: 999px;
 }
 
 .agent-composer-stack {

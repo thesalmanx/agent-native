@@ -129,6 +129,33 @@ describe("useSmoothStreamingText", () => {
     ).toBe(firstVisibleText);
   });
 
+  it("starts a new message from its own cursor when the message key changes", () => {
+    const firstText = "The first response is still being revealed.";
+    const nextText = "The first response is replaced by a follow-up.";
+
+    act(() => {
+      root.render(<Probe text={firstText} resetKey="message-1" />);
+    });
+
+    act(() => {
+      const callback = frameCallbacks.shift();
+      callback?.(40);
+    });
+    expect(
+      container.querySelector("[data-testid='visible-text']")?.textContent,
+    ).not.toBe(firstText);
+
+    act(() => {
+      root.render(<Probe text={nextText} resetKey="message-2" />);
+    });
+
+    const visibleText = container.querySelector(
+      "[data-testid='visible-text']",
+    )?.textContent;
+    expect(visibleText).not.toContain(firstText.slice(0, 12));
+    expect(nextText.startsWith(visibleText ?? "")).toBe(true);
+  });
+
   it("keeps wide markdown tables inside a scrollable wrapper", () => {
     act(() => {
       root.render(<MarkdownTableProbe />);

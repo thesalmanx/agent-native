@@ -27,6 +27,7 @@ import {
   getComposerSendTooltipKey,
   getComposerSubmitIntentForEnterKey,
   getComposerPopoverPosition,
+  getComposerPopoverAnchorPosition,
   getComposerReasoningEffortOptions,
   getOversizedDocumentAttachmentError,
   handleComposerFileDrop,
@@ -572,6 +573,42 @@ describe("createTiptapComposerExtensions", () => {
         1,
       ),
     ).toBeNull();
+  });
+
+  it("anchors the composer popover to the composer root", () => {
+    const root = document.createElement("div");
+    root.setAttribute("data-agent-composer-slot", "root");
+    const editor = document.createElement("div");
+    root.appendChild(editor);
+    document.body.appendChild(root);
+    vi.spyOn(root, "getBoundingClientRect").mockReturnValue({
+      top: 180,
+      left: 24,
+      width: 640,
+      right: 664,
+      bottom: 260,
+      height: 80,
+      x: 24,
+      y: 180,
+      toJSON: () => {},
+    });
+
+    expect(
+      getComposerPopoverAnchorPosition(
+        {
+          coordsAtPos: () => ({
+            top: 224,
+            bottom: 244,
+            left: 96,
+            right: 96,
+          }),
+          dom: editor,
+        },
+        1,
+      ),
+    ).toEqual({ top: 180, left: 24, width: 640 });
+
+    root.remove();
   });
 
   it("consumes composer file drops so parent drop targets do not attach duplicates", () => {

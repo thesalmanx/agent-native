@@ -145,14 +145,11 @@ export function resetSegmenterCache(): void {
 export function initialSmoothStreamingGraphemeCount(
   graphemes: readonly string[],
 ): number {
-  if (graphemes.length <= SMOOTH_STREAMING_LONG_TEXT_THRESHOLD_GRAPHEMES) {
-    return 0;
-  }
-
-  return Math.max(
-    0,
-    graphemes.length - SMOOTH_STREAMING_LONG_TEXT_TAIL_GRAPHEMES,
-  );
+  // Always begin at the start of the response. Jumping to the tail for a
+  // large first payload makes the assistant appear to dump a paragraph before
+  // the smoother can establish a conversational cadence.
+  void graphemes;
+  return 0;
 }
 
 export function smoothStreamingRevealCount({

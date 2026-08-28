@@ -84,7 +84,7 @@
 }
 
 .agent-conversation-message__part + .agent-conversation-message__part {
-  margin-top: 10px;
+  margin-top: 8px;
 }
 
 .agent-conversation-message__part--tool,
@@ -96,7 +96,7 @@
 .agent-conversation-markdown {
   color: hsl(var(--foreground) / 0.82);
   font-size: 13px;
-  line-height: 1.6;
+  line-height: 1.5;
   overflow-wrap: anywhere;
 }
 
@@ -579,22 +579,28 @@
   margin-top: 0;
 }
 
+/* Compact Codex-style reading rhythm: keep the renderer's rich content
+   treatment, but let the conversation carry more information per viewport. */
+.agent-markdown {
+  line-height: 1.5;
+}
+
 .agent-markdown > :last-child {
   margin-bottom: 0;
 }
 
 .agent-markdown p {
-  margin: 0.5em 0;
+  margin: 0.4em 0;
 }
 
 .agent-markdown ul,
 .agent-markdown ol {
-  margin: 0.5em 0;
+  margin: 0.4em 0;
   padding-inline-start: 1.5em;
 }
 
 .agent-markdown li {
-  margin: 0.2em 0;
+  margin: 0.15em 0;
 }
 
 .agent-markdown li > p {

@@ -1,4 +1,4 @@
-// Owns: lazy react-markdown/shiki loaders, SmoothMarkdownText, MarkdownText,
+// Owns: lazy react-markdown/shiki loaders, StreamingText, MarkdownText,
 // HighlightedCodeBlock wrapper, and the markdownComponents/markdownUrlTransform
 // used by every markdown render path in AssistantChat.
 
@@ -479,6 +479,7 @@ export function useSmoothStreamingText(
   const frameRef = useRef<number | null>(null);
   const lastCommitAtRef = useRef(0);
   const pauseUntilRef = useRef(0);
+  const inputDoneRef = useRef(false);
   const resetKeyRef = useRef(resetKey);
   const cacheKeyRef = useRef(resetKey);
   const cacheStreamingRef = useRef(streaming);
@@ -565,6 +566,7 @@ export function useSmoothStreamingText(
     const revealCount = smoothStreamingRevealCount({
       backlog,
       elapsedMs: Math.min(120, Math.max(8, time - lastCommitAt)),
+      inputDone: inputDoneRef.current,
     });
 
     if (revealCount > 0) {
@@ -592,8 +594,27 @@ export function useSmoothStreamingText(
     const keyChanged = resetKeyRef.current !== resetKey;
     resetKeyRef.current = resetKey;
 
+    const targetGraphemes = splitStreamingTextGraphemes(targetText);
+    const shouldSettleBufferedText =
+      !keyChanged &&
+      !streaming &&
+      !prefersReducedMotion &&
+      visibleTextRef.current.length > 0 &&
+      visibleTextRef.current !== targetText &&
+      targetText.startsWith(visibleTextRef.current);
+
+    if (shouldSettleBufferedText) {
+      targetGraphemesRef.current = targetGraphemes;
+      inputDoneRef.current = true;
+      if (visibleCountRef.current < targetGraphemes.length) {
+        scheduleFrame();
+      }
+      return;
+    }
+
     if (!streaming || prefersReducedMotion) {
       cancelFrame();
+      inputDoneRef.current = false;
       targetGraphemesRef.current = EMPTY_GRAPHEMES;
       visibleCountRef.current = 0;
       if (visibleTextRef.current !== targetText) {
@@ -603,17 +624,17 @@ export function useSmoothStreamingText(
       return;
     }
 
-    const targetGraphemes = splitStreamingTextGraphemes(targetText);
     targetGraphemesRef.current = targetGraphemes;
+    inputDoneRef.current = false;
 
     const visibleNoLongerMatchesTarget =
       visibleTextRef.current.length > 0 &&
       !targetText.startsWith(visibleTextRef.current);
 
     if (
+      keyChanged ||
       visibleNoLongerMatchesTarget ||
-      visibleCountRef.current > targetGraphemes.length ||
-      (keyChanged && visibleTextRef.current.length === 0)
+      visibleCountRef.current > targetGraphemes.length
     ) {
       commitVisibleCount(initialSmoothStreamingGraphemeCount(targetGraphemes));
       lastCommitAtRef.current = 0;
@@ -702,9 +723,9 @@ export const MemoizedMarkdownBlock = React.memo(function MemoizedMarkdownBlock({
   );
 });
 
-// ─── SmoothMarkdownText ────────────────────────────────────────────────────────
+// ─── StreamingText ────────────────────────────────────────────────────────────
 
-export function SmoothMarkdownText({
+export function StreamingText({
   text,
   streaming,
   resetKey,
@@ -765,9 +786,19 @@ export function SmoothMarkdownText({
       ) : (
         <span style={{ whiteSpace: "pre-wrap" }}>{visibleText}</span>
       )}
+      {shouldAnimate && visibleText !== text ? (
+        <span
+          aria-hidden="true"
+          className="agent-streaming-cursor"
+          data-agent-streaming-cursor="true"
+        />
+      ) : null}
     </div>
   );
 }
+
+/** @deprecated Use StreamingText for new AgentKit surfaces. */
+export const SmoothMarkdownText = StreamingText;
 
 // ─── MarkdownText ──────────────────────────────────────────────────────────────
 
@@ -801,7 +832,7 @@ export function MarkdownText() {
     textPart.status?.type ?? message.status?.type ?? "complete";
 
   return (
-    <SmoothMarkdownText
+    <StreamingText
       text={localizeKnownChatErrorText(textPart.text, t)}
       streaming={shouldAnimateMarkdownText({
         textStreaming,
