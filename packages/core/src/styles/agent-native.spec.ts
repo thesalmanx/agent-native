@@ -68,17 +68,29 @@ describe("agent-native shell surface tokens", () => {
     );
   });
 
-  it("keeps the raised app surface on the semantic background color", () => {
+  it("keeps the shell surface hierarchy on semantic roles", () => {
     const css = readFileSync(new URL("./agent-native.css", import.meta.url), {
       encoding: "utf8",
     });
 
     expect(css).toContain(
-      "--agent-native-raised-surface: hsl(var(--background));",
+      "--agent-native-raised-surface: var(--agent-kit-recessed-surface);",
     );
-    expect(css).toContain("--agent-native-card-surface: hsl(var(--card));");
+    expect(css).toContain(
+      "--agent-native-lower-surface: var(--agent-kit-nav-surface);",
+    );
+    expect(css).toContain(
+      "--agent-native-card-surface: var(--agent-kit-raised-surface);",
+    );
     expect(css).not.toMatch(/--agent-native-raised-surface:\s*color-mix\(/);
     expect(css).not.toMatch(/--agent-native-card-surface:\s*color-mix\(/);
+    expect(
+      readFileSync(new URL("./tokens/agent-kit.css", import.meta.url), {
+        encoding: "utf8",
+      }),
+    ).toMatch(
+      /--agent-kit-recessed-surface:[\s\S]*?--agent-kit-nav-surface:[\s\S]*?--agent-kit-raised-surface:/s,
+    );
   });
 
   it("keeps app and agent main surfaces borderless", () => {
@@ -167,12 +179,23 @@ describe("agent-native shell surface tokens", () => {
     const css = readFileSync(new URL("./agent-native.css", import.meta.url), {
       encoding: "utf8",
     });
+    const tokens = readFileSync(
+      new URL("./tokens/agent-kit.css", import.meta.url),
+      { encoding: "utf8" },
+    );
 
     expect(css).toMatch(
-      /\.agent-sidebar-panel\[data-agent-sidebar-animation="drawer"\][\s\S]*?--agent-shadow: 0 0% 0%;[\s\S]*?box-shadow:[\s\S]*?hsl\(var\(--agent-shadow\) \/ var\(--agent-shadow-o\)\);/s,
+      /\.agent-sidebar-panel\[data-agent-sidebar-animation="drawer"\][\s\S]*?box-shadow: var\(--agent-kit-drawer-elevation\);/s,
     );
-    expect(css).toMatch(
-      /\.dark \.agent-sidebar-panel\[data-agent-sidebar-animation="drawer"\][\s\S]*?--agent-shadow-o: 0\.08;/s,
+    expect(tokens).toMatch(
+      /\.dark\s*\{[\s\S]*?--agent-kit-shadow-color: var\(--background\);[\s\S]*?--agent-kit-drawer-elevation:/s,
+    );
+    expect(css).not.toContain("hsl(var(--foreground) / 0.07)");
+    expect(css).not.toContain("hsl(var(--foreground) / 0.12)");
+    expect(css).not.toContain("hsl(var(--agent-shadow)");
+    expect(tokens).toContain("--agent-kit-shadow-color: var(--foreground);");
+    expect(tokens).toMatch(
+      /\.dark\s*\{[\s\S]*?--agent-kit-shadow-color: var\(--background\);[\s\S]*?--agent-kit-composer-elevation:[\s\S]*?hsl\(var\(--agent-kit-shadow-color\) \/ 0\.22\)/s,
     );
     expect(css).toMatch(
       /::view-transition-old\(agent-native-sidebar-drawer\),\s*::view-transition-new\(agent-native-sidebar-drawer\)[\s\S]*?height: 100%;/s,

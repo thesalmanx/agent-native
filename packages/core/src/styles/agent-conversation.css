@@ -43,14 +43,8 @@
   border-radius: 999px;
   background: hsl(var(--popover));
   color: hsl(var(--foreground));
-  --agent-shadow: 0 0% 0%;
-  --agent-shadow-o: 0.14;
-  box-shadow: 0 10px 30px hsl(var(--agent-shadow) / var(--agent-shadow-o));
+  box-shadow: var(--agent-kit-overlay-elevation);
   cursor: pointer;
-}
-
-.dark .agent-conversation__scroll-bottom {
-  --agent-shadow-o: 0.08;
 }
 
 .agent-conversation-message {
@@ -363,7 +357,7 @@
   border: 1px solid hsl(var(--destructive) / 0.35);
   border-radius: calc(var(--radius) - 2px);
   background: hsl(var(--background) / 0.96);
-  box-shadow: 0 8px 24px hsl(var(--foreground) / 0.12);
+  box-shadow: var(--agent-kit-overlay-elevation);
   color: hsl(var(--destructive));
   text-align: center;
   pointer-events: auto;

@@ -9,6 +9,12 @@
   --agent-kit-conversation-max-width: 46.875rem;
   --agent-kit-composer-adjacent-inline-inset: 1.5rem;
 
+  --agent-kit-recessed-surface: hsl(var(--background));
+  --agent-kit-nav-surface: hsl(
+    var(--sidebar-background, var(--background))
+  );
+  --agent-kit-raised-surface: hsl(var(--card));
+
   --agent-kit-density-font-size: 0.8125rem;
   --agent-kit-density-line-height: 1.25rem;
   --agent-kit-supporting-font-size: 0.75rem;
@@ -56,12 +62,42 @@
   --agent-kit-composer-toolbar-padding-block-start: 0.25rem;
   --agent-kit-composer-toolbar-padding-block-end: 0.5rem;
   --agent-kit-composer-control-size: 2rem;
+  --agent-kit-shadow-color: var(--foreground);
+  --agent-kit-control-elevation: 0 0.0625rem 0.125rem
+    hsl(var(--agent-kit-shadow-color) / 0.06);
   --agent-kit-composer-elevation: 0 0.5rem 1.875rem
-    hsl(var(--foreground) / 0.06);
+    hsl(var(--agent-kit-shadow-color) / 0.06);
+  --agent-kit-overlay-elevation: 0 0.625rem 1.875rem
+    hsl(var(--agent-kit-shadow-color) / 0.14);
+  --agent-kit-drawer-elevation: -0.75rem 0 1.875rem
+    hsl(var(--agent-kit-shadow-color) / 0.14);
+  --agent-kit-drawer-elevation-block: 0 1.125rem 2.5rem
+    hsl(var(--agent-kit-shadow-color) / 0.14);
 
   --agent-kit-positive: 142 72% 38%;
 }
 
+@supports (background: color-mix(in srgb, white, black)) {
+  :root {
+    /* Keep the depth order explicit: nav < canvas < raised content. */
+    --agent-kit-recessed-surface: hsl(var(--background));
+    --agent-kit-nav-surface: hsl(
+      var(--sidebar-background, var(--background))
+    );
+  }
+}
+
 .dark {
+  --agent-kit-shadow-color: var(--background);
+  --agent-kit-control-elevation: 0 0.0625rem 0.125rem
+    hsl(var(--agent-kit-shadow-color) / 0.18);
+  --agent-kit-composer-elevation: 0 0.5rem 1.875rem
+    hsl(var(--agent-kit-shadow-color) / 0.22);
+  --agent-kit-overlay-elevation: 0 0.625rem 1.875rem
+    hsl(var(--agent-kit-shadow-color) / 0.24);
+  --agent-kit-drawer-elevation: -0.75rem 0 1.875rem
+    hsl(var(--agent-kit-shadow-color) / 0.26);
+  --agent-kit-drawer-elevation-block: 0 1.125rem 2.5rem
+    hsl(var(--agent-kit-shadow-color) / 0.26);
   --agent-kit-positive: 142 62% 56%;
 }

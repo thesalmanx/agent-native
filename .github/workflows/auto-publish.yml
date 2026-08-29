@@ -24,6 +24,7 @@ on:
     paths:
       # npm-published packages — any source change reaches here via the
       # Version Packages PR merge bumping their package.json.
+      - "packages/agentkit-protocol/**"
       - "packages/core/**"
       - "packages/creative-context/**"
       - "packages/dispatch/**"

@@ -8,6 +8,7 @@ const repoRoot = path.resolve(
 );
 
 const npmPublishAllowlist = new Set([
+  "@agent-native/agentkit-protocol",
   "@agent-native/core",
   "@agent-native/creative-context",
   "@agent-native/dispatch",

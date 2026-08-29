@@ -23,18 +23,18 @@ and docs. Dispatch is a separate product rather than a Toolkit module.
 
 ## AgentKit
 
-Toolkit owns AgentKit's reusable conversation UI, including composers, prompt
-menus, agent-authored next-action bars, queue drawers, streaming text, activity
-traces, approvals, message actions, and future inline widgets. Core owns
-execution, persistence, transport, attachments, and application-state adapters.
-The provider-neutral event contract lives in
+AgentKit is split at a deliberate seam. Toolkit owns presentation primitives:
+composers, prompt menus, agent-authored next-action bars, queue drawers, and
+design-system adapters. Core owns runtime-backed chat surfaces and registries:
+streaming text, activity traces, approvals, tool and widget renderers, threads,
+attachments, and application-state adapters. Both layers are reusable, and
+Toolkit stays Core-free. The provider-neutral event contract lives in
 [`@agent-native/agentkit-protocol`](../agentkit-protocol/README.md).
 
-[OpenAI ChatKit JS](https://github.com/openai/chatkit-js) is a declared product
-and architecture reference for this work. AgentKit is an independent
-implementation optimized for Agent-Native workflows, not a ChatKit runtime
-dependency or compatibility layer. The protocol README records the shared
-product goals and clean implementation boundary.
+AgentKit is an independent implementation optimized for Agent-Native workflows.
+The protocol README records the shared product goals and clean implementation
+boundary; it is not a runtime dependency or compatibility layer for another
+chat product.
 
 ## Imports
 

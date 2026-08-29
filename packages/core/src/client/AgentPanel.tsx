@@ -1906,7 +1906,7 @@ function AgentPanelInner({
               />
               <header
                 data-agent-page-chat-header=""
-                className="agent-kit-page-header absolute inset-x-0 top-0 flex items-center gap-3 border-b border-border/70 bg-background/95 px-3 backdrop-blur-sm sm:px-4"
+                className="agent-kit-page-header absolute inset-x-0 top-0 flex items-center gap-3 border-b border-border/70 px-3 sm:px-4"
               >
                 <div className="flex min-w-0 flex-1 items-center gap-2">
                   {pageHeaderLeadingSlot}

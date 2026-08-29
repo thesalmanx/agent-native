@@ -72,37 +72,13 @@
    AgentSidebar applies the same classes internally for the right agent drawer. */
 .agent-sidebar-shell,
 .agent-layout-shell {
-  --agent-native-lower-surface: hsl(
-    var(--sidebar-background, var(--background))
-  );
-  --agent-native-raised-surface: hsl(var(--background));
-  --agent-native-card-surface: hsl(var(--card));
+  --agent-native-lower-surface: var(--agent-kit-nav-surface);
+  --agent-native-raised-surface: var(--agent-kit-recessed-surface);
+  --agent-native-card-surface: var(--agent-kit-raised-surface);
   --agent-native-raised-radius: 8px;
   height: var(--agent-native-viewport-height);
   min-height: 0;
   background: var(--agent-native-lower-surface);
-}
-
-@supports (background: color-mix(in srgb, white, black)) {
-  .agent-sidebar-shell,
-  .agent-layout-shell {
-    --agent-native-lower-surface: color-mix(
-      in srgb,
-      hsl(var(--sidebar-background, var(--background))) 98%,
-      black
-    );
-  }
-
-  .dark .agent-sidebar-shell,
-  .dark .agent-layout-shell,
-  .dark.agent-sidebar-shell,
-  .dark.agent-layout-shell {
-    --agent-native-lower-surface: color-mix(
-      in srgb,
-      hsl(var(--sidebar-background, var(--background))) 94%,
-      black
-    );
-  }
 }
 
 .agent-layout-left-drawer,
@@ -159,16 +135,12 @@
    charge of the actual colors. */
 .agent-sidebar-panel[data-agent-sidebar-layout="desktop"] {
   border-inline-start: 1px solid hsl(var(--border) / 0.72);
-  background: color-mix(
-    in srgb,
-    hsl(var(--background)) 96%,
-    hsl(var(--foreground)) 4%
-  );
+  background: var(--agent-kit-recessed-surface);
 }
 
 .agent-sidebar-panel .agent-sidebar-chat-header {
   border-bottom: 1px solid hsl(var(--border) / 0.72);
-  background: hsl(var(--background));
+  background: var(--agent-kit-recessed-surface);
 }
 
 /* Tabs should read as part of the panel's navigation, not as a second window
@@ -200,13 +172,13 @@
 
 .agent-sidebar-panel .agent-tab.bg-accent {
   border-color: hsl(var(--border));
-  background: hsl(var(--background)) !important;
-  box-shadow: 0 1px 2px hsl(var(--foreground) / 0.06);
+  background: var(--agent-kit-raised-surface) !important;
+  box-shadow: var(--agent-kit-control-elevation);
   color: hsl(var(--foreground));
 }
 
 .agent-sidebar-panel .agent-chat-scroll {
-  background: hsl(var(--background));
+  background: var(--agent-kit-recessed-surface);
 }
 
 .agent-streaming-cursor {
@@ -258,18 +230,16 @@
 .agent-sidebar-panel .agent-composer-root:not(.agent-composer-root--hero) {
   border-radius: 0.875rem;
   border-color: hsl(var(--border) / 0.9);
-  background: hsl(var(--background));
-  box-shadow:
-    0 6px 20px hsl(var(--foreground) / 0.07),
-    0 1px 2px hsl(var(--foreground) / 0.04);
+  background: var(--agent-kit-raised-surface);
+  box-shadow: var(--agent-kit-composer-elevation);
 }
 
 .agent-sidebar-panel .agent-composer-stack {
-  background: hsl(var(--background));
+  background: var(--agent-kit-recessed-surface);
 }
 
 .agent-sidebar-panel [data-agent-suggestion-bar="true"] {
-  background: hsl(var(--background));
+  background: var(--agent-kit-recessed-surface);
 }
 
 .agent-sidebar-panel .agent-composer-workflow {
@@ -495,9 +465,7 @@
    when available; these transforms provide the fallback and exit motion. */
 .agent-sidebar-panel[data-agent-sidebar-animation="drawer"] {
   overflow: clip;
-  --agent-shadow: 0 0% 0%;
-  --agent-shadow-o: 0.14;
-  box-shadow: -12px 0 30px hsl(var(--agent-shadow) / var(--agent-shadow-o));
+  box-shadow: var(--agent-kit-drawer-elevation);
   transition:
     transform 260ms var(--ease-drawer),
     width 260ms var(--ease-drawer);
@@ -517,19 +485,12 @@
 }
 
 .agent-sidebar-panel[data-agent-sidebar-animation="mobile"] {
-  --agent-shadow: 0 0% 0%;
-  --agent-shadow-o: 0.14;
   transform: var(
     --agent-sidebar-closed-transform,
     translateX(calc(100% + 1px))
   );
-  box-shadow: 0 18px 40px hsl(var(--agent-shadow) / var(--agent-shadow-o));
+  box-shadow: var(--agent-kit-drawer-elevation-block);
   transition: transform 260ms var(--ease-drawer);
-}
-
-.dark .agent-sidebar-panel[data-agent-sidebar-animation="drawer"],
-.dark .agent-sidebar-panel[data-agent-sidebar-animation="mobile"] {
-  --agent-shadow-o: 0.08;
 }
 
 .agent-sidebar-panel[data-agent-sidebar-animation="mobile"][data-agent-sidebar-state="open"] {
@@ -752,6 +713,7 @@
 .agent-kit-page-header {
   height: var(--agent-kit-page-header-height);
   z-index: var(--agent-kit-layer-page-header);
+  background: var(--agent-kit-recessed-surface);
 }
 
 .agent-kit-chat-canvas-toolbar {
@@ -1275,22 +1237,7 @@
 .agent-composer-area--attached-above .agent-composer-root {
   position: relative;
   z-index: 3;
-  background: hsl(var(--muted));
-  background: color-mix(
-    in srgb,
-    hsl(var(--card)) 98%,
-    hsl(var(--foreground)) 2%
-  );
-}
-
-.dark .agent-composer-area--attached-above .agent-composer-root {
-  background: hsl(var(--card));
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not(.light) .agent-composer-area--attached-above .agent-composer-root {
-    background: hsl(var(--card));
-  }
+  background: var(--agent-kit-raised-surface);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1303,7 +1250,7 @@
   min-height: var(--agent-kit-composer-min-height);
   border-radius: var(--agent-kit-composer-radius);
   border-color: var(--agent-kit-composer-border-color);
-  background: hsl(var(--card));
+  background: var(--agent-kit-raised-surface);
   box-shadow: var(--agent-kit-composer-elevation);
 }
 
