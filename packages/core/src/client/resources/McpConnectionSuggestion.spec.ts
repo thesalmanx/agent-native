@@ -7,6 +7,28 @@ import {
 } from "./McpConnectionSuggestion.js";
 
 describe("findMcpConnectionSuggestionIntegration", () => {
+  it("never promotes integrations from user-authored composer text", () => {
+    expect(
+      findMcpConnectionSuggestionIntegration({
+        text: "Connect Cloudflare so I can explain this app.",
+      }),
+    ).toBeNull();
+    expect(
+      findMcpConnectionSuggestionIntegration({
+        text: "Send the update to Slack.",
+      }),
+    ).toBeNull();
+  });
+
+  it("allows an explicitly agent-requested connection beside the composer", () => {
+    expect(
+      findMcpConnectionSuggestionIntegration({
+        text: "Please connect Cloudflare so I can inspect the deployment.",
+        requestedByAgent: true,
+      })?.id,
+    ).toBe("cloudflare");
+  });
+
   it("does not select a provider from incidental assistant response text", () => {
     expect(
       findMcpConnectionSuggestionIntegration({

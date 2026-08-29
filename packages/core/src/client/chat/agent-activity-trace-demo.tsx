@@ -1,4 +1,3 @@
-import { IconArrowUp } from "@tabler/icons-react";
 import { useEffect, useMemo, useState } from "react";
 
 import {
@@ -46,7 +45,11 @@ const DEMO_STEPS: AgentActivityItem[] = [
   {
     id: "read",
     label: "Read analytics schema",
-    detail: "analytics.ts",
+    object: {
+      kind: "file",
+      label: "analytics.ts",
+      mono: true,
+    },
     summary: (
       <ToolChips
         steps={[
@@ -59,7 +62,7 @@ const DEMO_STEPS: AgentActivityItem[] = [
         ]}
       />
     ),
-    variant: "coding",
+    variant: "read",
   },
   {
     id: "edit",
@@ -77,7 +80,7 @@ const DEMO_STEPS: AgentActivityItem[] = [
         ]}
       />
     ),
-    variant: "coding",
+    variant: "changes",
   },
   {
     id: "verify",
@@ -90,12 +93,13 @@ const DEMO_STEPS: AgentActivityItem[] = [
             id: "verify-checks",
             kind: "run",
             label: "Run checks",
-            chip: "12 passed",
+            chip: "pnpm test --filter dashboard",
+            mono: true,
           },
         ]}
       />
     ),
-    variant: "steps",
+    variant: "command",
   },
 ];
 
@@ -124,37 +128,26 @@ export function AgentActivityTraceDemo() {
   }, [running, visibleSteps]);
 
   return (
-    <div className="agent-activity-demo flex min-h-0 flex-1 flex-col">
-      <div className="flex-1 overflow-y-auto px-4 py-5">
-        <p className="max-w-[92%] rounded-2xl bg-muted px-3 py-2 text-sm leading-5">
-          Review the workspace health, improve the dashboard, and tell me what
-          changed.
-        </p>
-        <div className="mt-4">
-          <AgentActivityTrace
-            items={items}
-            summary={
-              running ? "Working through 5 actions" : "Completed 5 actions"
-            }
-            activeSummary={items[items.length - 1]?.label ?? "Working"}
-            variant="coding"
-            running={running}
-            displayMode="auto"
-            defaultOpen
-          />
-          {!running ? (
-            <div className="agent-markdown mt-4 text-sm text-foreground">
-              The dashboard now includes a workspace health summary, a 30-day
-              activity trend, and clearer failure states. All 12 checks passed.
-            </div>
-          ) : null}
-        </div>
-      </div>
-      <div className="border-t border-border px-4 pb-4 pt-3">
-        <div className="flex min-h-10 items-center rounded-xl border border-border bg-background px-3 text-sm text-muted-foreground">
-          <span className="flex-1">Try another request…</span>
-          <IconArrowUp className="size-4 opacity-40" />
-        </div>
+    <div className="agent-activity-demo">
+      <p className="agent-kit-message-bubble-boundary rounded-2xl bg-muted px-3 py-2 text-sm leading-5">
+        Review the workspace health, improve the dashboard, and tell me what
+        changed.
+      </p>
+      <div className="mt-4">
+        <AgentActivityTrace
+          items={items}
+          activeSummary={items[items.length - 1]?.label ?? "Working"}
+          variant="coding"
+          running={running}
+          displayMode="auto"
+          defaultOpen
+        />
+        {!running ? (
+          <div className="agent-markdown mt-4 text-sm text-foreground">
+            The dashboard now includes a workspace health summary, a 30-day
+            activity trend, and clearer failure states. All 12 checks passed.
+          </div>
+        ) : null}
       </div>
     </div>
   );

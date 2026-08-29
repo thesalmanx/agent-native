@@ -30,6 +30,11 @@ export interface McpConnectionSuggestionProps {
   text: string;
   contextText?: string;
   variant?: McpConnectionSuggestionVariant;
+  /**
+   * Required when rendering an agent-authored connection request beside the
+   * composer. User-authored composer text must never promote integrations.
+   */
+  requestedByAgent?: boolean;
   integrations?: DefaultMcpIntegration[];
 }
 
@@ -45,11 +50,18 @@ export function findMcpConnectionSuggestionIntegration({
   text,
   contextText = "",
   variant = "composer",
+  requestedByAgent = false,
   integrations = getDefaultMcpIntegrations(),
 }: McpConnectionSuggestionProps): DefaultMcpIntegration | null {
   const responseText = visibleUserAuthoredText(text);
   if (variant !== "response") {
-    return findMcpIntegrationForText(responseText, integrations);
+    if (!requestedByAgent) return null;
+    if (
+      !isMcpConnectionSuggestionText(responseText) &&
+      !isMcpConnectionFailureText(responseText)
+    ) {
+      return null;
+    }
   }
 
   // A completed response may itself be the agent's request for setup. Prefer
@@ -110,6 +122,7 @@ export function McpConnectionSuggestion({
   text,
   contextText = "",
   variant = "composer",
+  requestedByAgent = false,
   integrations: integrationOptions,
 }: McpConnectionSuggestionProps) {
   const t = useT();
@@ -132,9 +145,10 @@ export function McpConnectionSuggestion({
         text,
         contextText,
         variant,
+        requestedByAgent,
         integrations,
       }),
-    [contextText, integrations, text, variant],
+    [contextText, integrations, requestedByAgent, text, variant],
   );
   const apiFallback = integration
     ? getMcpIntegrationApiFallback(integration)
@@ -195,7 +209,7 @@ export function McpConnectionSuggestion({
         className={
           variant === "response"
             ? "agent-mcp-connection-suggestion agent-mcp-connection-suggestion--response mt-3 flex max-w-[520px] items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-[12px]"
-            : "agent-mcp-connection-suggestion agent-mcp-connection-suggestion--composer mx-auto mb-2 flex w-[min(calc(100%_-_1.5rem),750px)] items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-[12px]"
+            : "agent-mcp-connection-suggestion agent-mcp-connection-suggestion--composer agent-kit-composer-adjacent-width agent-kit-supporting-copy mx-auto mb-2 flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2"
         }
         data-mcp-connection-suggestion={integration.id}
         data-mcp-connection-suggestion-variant={variant}
@@ -240,7 +254,7 @@ export function McpConnectionSuggestion({
           className={
             variant === "response"
               ? "agent-mcp-connection-suggestion-error agent-mcp-connection-suggestion-error--response mt-1 max-w-[520px] text-[11px] text-destructive"
-              : "agent-mcp-connection-suggestion-error agent-mcp-connection-suggestion-error--composer mx-auto mb-2 w-[min(calc(100%_-_1.5rem),750px)] text-[11px] text-destructive"
+              : "agent-mcp-connection-suggestion-error agent-mcp-connection-suggestion-error--composer agent-kit-composer-adjacent-width agent-kit-caption-copy mx-auto mb-2 text-destructive"
           }
         >
           {error}

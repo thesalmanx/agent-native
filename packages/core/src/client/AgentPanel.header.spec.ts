@@ -15,9 +15,11 @@ import {
   resolveAgentPanelFullViewAction,
   resolveAgentPanelChatSurface,
   shouldAllowAgentChatSurfaceSettingsMode,
+  shouldDefaultAgentChatSurfacePageHeader,
   shouldDefaultAgentChatSurfacePageNewChatButton,
   shouldHandleAgentSidebarToggle,
   shouldShowAgentPanelFullViewAction,
+  shouldShowAgentPanelPageHeader,
   shouldShowAgentPanelPageNewChatButton,
   shouldShowAgentPanelChatTabBar,
   shouldShowAgentPanelSidebarChatTabs,
@@ -138,19 +140,62 @@ describe("AgentPanel header tab visibility", () => {
     ).toBe(false);
   });
 
-  it("defaults the page new-chat button on for page chats", () => {
-    expect(
-      shouldDefaultAgentChatSurfacePageNewChatButton("page", undefined),
-    ).toBe(true);
-    expect(shouldDefaultAgentChatSurfacePageNewChatButton("page", true)).toBe(
+  it("shows page chrome only after the conversation begins", () => {
+    expect(shouldShowAgentPanelPageHeader([chatTab("main")], "main", 0)).toBe(
+      false,
+    );
+    expect(shouldShowAgentPanelPageHeader([chatTab("main")], "main", 1)).toBe(
       true,
     );
+    expect(
+      shouldShowAgentPanelPageHeader(
+        [chatTab("main", undefined, "running")],
+        "main",
+        0,
+      ),
+    ).toBe(true);
+    expect(
+      shouldShowAgentPanelPageHeader([chatTab("main")], "main", 0, true),
+    ).toBe(true);
+  });
+
+  it("keeps new chat out of the page canvas header by default", () => {
+    expect(
+      shouldDefaultAgentChatSurfacePageNewChatButton("page", undefined),
+    ).toBe(false);
+    expect(shouldDefaultAgentChatSurfacePageNewChatButton("page", true)).toBe(
+      false,
+    );
     expect(shouldDefaultAgentChatSurfacePageNewChatButton("page", false)).toBe(
-      true,
+      false,
     );
     expect(shouldDefaultAgentChatSurfacePageNewChatButton("panel", true)).toBe(
       false,
     );
+  });
+
+  it("defaults the active-thread header on only for page chats", () => {
+    expect(shouldDefaultAgentChatSurfacePageHeader("page")).toBe(true);
+    expect(shouldDefaultAgentChatSurfacePageHeader("panel")).toBe(false);
+    expect(shouldDefaultAgentChatSurfacePageHeader(undefined)).toBe(false);
+  });
+
+  it("exposes page header composition without moving it into app chrome", () => {
+    const source = readFileSync("src/client/AgentPanel.tsx", "utf8");
+
+    expect(source).toContain('data-agent-page-chat-header=""');
+    expect(source).toContain("pageHeaderLeadingSlot");
+    expect(source).toContain("pageToolbarSlot");
+    expect(source).toContain("activeTab?.label");
+    expect(source).toContain('data-agent-page-title-menu=""');
+    expect(source).toContain("<IconShare3 size={15}");
+    expect(source.indexOf("<IconShare3 size={15}")).toBeLessThan(
+      source.indexOf(
+        "{pageToolbarSlot}",
+        source.indexOf("triggerContent={<IconShare3"),
+      ),
+    );
+    expect(source).toContain("border-b border-border/70");
   });
 
   it("does not allow sidebar settings mode in page chat by default", () => {

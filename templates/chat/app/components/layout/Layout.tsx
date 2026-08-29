@@ -50,7 +50,7 @@ export function Layout({ children }: LayoutProps) {
   const navigate = useNavigate();
   const t = useT();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const isChatRoute =
     location.pathname === "/" || location.pathname.startsWith("/chat/");
   const chatHomeHandoffActive = useAgentChatHomeHandoff({
@@ -140,15 +140,21 @@ export function Layout({ children }: LayoutProps) {
 
   return (
     <HeaderActionsProvider>
-      <div className="agent-layout-shell flex h-screen w-full overflow-hidden bg-background text-foreground">
-        <div className="agent-layout-left-drawer hidden md:block">
+      <div className="agent-layout-shell chat-layout-shell flex h-screen w-full overflow-hidden bg-background text-foreground">
+        <div
+          data-collapsed={sidebarCollapsed ? "true" : "false"}
+          className="agent-layout-left-drawer hidden md:block"
+        >
           <Sidebar
             collapsed={sidebarCollapsed}
             onCollapsedChange={setSidebarCollapsed}
           />
         </div>
         <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
-          <SheetContent side="left" className="p-0 w-[260px]">
+          <SheetContent
+            side="left"
+            className="w-[var(--chat-sidebar-width)] p-0"
+          >
             <SheetTitle className="sr-only">
               {t("navigation.navigation")}
             </SheetTitle>
@@ -159,7 +165,10 @@ export function Layout({ children }: LayoutProps) {
           </SheetContent>
         </Sheet>
         {isChatRoute ? (
-          <div className="agent-layout-main-surface flex min-w-0 flex-1 overflow-hidden">
+          <div
+            data-agent-chat-canvas="true"
+            className="agent-layout-main-surface flex min-w-0 flex-1 overflow-hidden"
+          >
             {contentFrame}
           </div>
         ) : (

@@ -3,6 +3,52 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 describe("agent-native shell surface tokens", () => {
+  it("routes AgentKit density, geometry, elevation, and status through role tokens", () => {
+    const css = readFileSync(new URL("./agent-native.css", import.meta.url), {
+      encoding: "utf8",
+    });
+    const tokens = readFileSync(
+      new URL("./tokens/agent-kit.css", import.meta.url),
+      { encoding: "utf8" },
+    );
+
+    expect(css).toContain('@import "./tokens/agent-kit.css";');
+    expect(css).toContain(".agent-kit-density");
+    expect(css).toContain(".agent-kit-activity-row");
+    expect(css).toContain(".agent-kit-tone-positive");
+    expect(css).toContain("var(--agent-kit-composer-elevation)");
+    expect(tokens).toContain("--agent-kit-conversation-max-width:");
+    expect(tokens).toContain("--agent-kit-density-font-size:");
+    expect(tokens).toContain("--agent-kit-composer-radius:");
+    expect(tokens).toContain("--agent-kit-positive:");
+  });
+
+  it("keeps AgentKit activity components on semantic roles", () => {
+    const sources = [
+      "../client/chat/agent-activity-trace.tsx",
+      "../client/chat/tool-chips.tsx",
+      "../client/chat/tool-call-display.tsx",
+      "../client/tool-cells/FilesChangedSummary.tsx",
+    ].map((path) =>
+      readFileSync(new URL(path, import.meta.url), { encoding: "utf8" }),
+    );
+    const source = sources.join("\n");
+
+    expect(source).not.toMatch(/text-(?:green|red|blue|gray|slate|zinc)-/);
+    expect(source).not.toContain("text-[13px]");
+    expect(source).not.toContain("max-w-[60%]");
+    expect(source).toContain("agent-kit-activity-row");
+    expect(source).toContain("agent-kit-activity-object-boundary");
+    expect(source).toContain("agent-kit-tone-positive");
+
+    const messages = readFileSync(
+      new URL("../client/chat/message-components.tsx", import.meta.url),
+      { encoding: "utf8" },
+    );
+    expect(messages).not.toContain("max-w-[95%]");
+    expect(messages).toContain("agent-kit-tool-content-boundary");
+  });
+
   it("restores standard markdown list markers", () => {
     const css = readFileSync(
       new URL("./agent-conversation.css", import.meta.url),
@@ -52,6 +98,33 @@ describe("agent-native shell surface tokens", () => {
     expect(frameCss).toMatch(
       /\.agent-frame-main-surface\[data-agent-frame-main-state="open"\] \{[^}]*box-shadow: none;/s,
     );
+  });
+
+  it("keeps the dedicated Chat canvas square against its navigation rail", () => {
+    const css = readFileSync(new URL("./agent-native.css", import.meta.url), {
+      encoding: "utf8",
+    });
+
+    expect(css).toMatch(
+      /\.agent-layout-main-surface\[data-agent-chat-canvas="true"\] \{[^}]*border-radius: 0;/s,
+    );
+  });
+
+  it("coordinates the AgentKit workspace reveal with the remaining chat canvas", () => {
+    const css = readFileSync(new URL("./agent-native.css", import.meta.url), {
+      encoding: "utf8",
+    });
+
+    expect(css).toMatch(
+      /\.agent-kit-chat-canvas-body--workspace-open \{[^}]*width: calc\(100% - var\(--agent-kit-workspace-panel-width\)\);/s,
+    );
+    expect(css).toMatch(
+      /\.agent-kit-chat-canvas-body \{[^}]*transition-property: width;/s,
+    );
+    expect(css).toMatch(
+      /\.agent-kit-workspace-panel \{[^}]*transition-property: transform;/s,
+    );
+    expect(css).not.toContain("--agent-kit-workspace-panel-opacity-duration");
   });
 
   it("removes shell transitions while the agent sidebar is being resized", () => {

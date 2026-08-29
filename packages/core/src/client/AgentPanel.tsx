@@ -565,6 +565,20 @@ export function shouldShowAgentPanelPageNewChatButton(
   activeTabId: string,
   activeTabMessageCount: number,
 ) {
+  return shouldShowAgentPanelPageHeader(
+    tabs,
+    activeTabId,
+    activeTabMessageCount,
+  );
+}
+
+export function shouldShowAgentPanelPageHeader(
+  tabs: MultiTabAssistantChatHeaderProps["tabs"],
+  activeTabId: string,
+  activeTabMessageCount: number,
+  hasInjectedContent = false,
+) {
+  if (hasInjectedContent) return true;
   if (!activeTabId) return false;
   if (activeTabMessageCount > 0) return true;
 
@@ -789,6 +803,14 @@ export interface AgentPanelProps extends Omit<
   showTabBar?: boolean;
   /** Show a compact New chat action in page chat when the main header is hidden. */
   showPageNewChatButton?: boolean;
+  /** Show the active thread title and page-level toolbar above fullscreen chat. */
+  showPageHeader?: boolean;
+  /** App-shell content rendered before the active thread title. */
+  pageHeaderLeadingSlot?: React.ReactNode;
+  /** App- or AgentKit-provided controls rendered in the page chat toolbar. */
+  pageToolbarSlot?: React.ReactNode;
+  /** Reports whether the active conversation has enough state to show page chrome. */
+  onPageHeaderVisibilityChange?: (visible: boolean) => void;
   /** Allow the sidebar settings view to render inside this panel. Default: true. */
   allowSettingsMode?: boolean;
   /** Keep this surface on chat even when mode controls are hidden. */
@@ -803,6 +825,19 @@ function useClientOnly() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   return mounted;
+}
+
+function PageHeaderVisibilityReporter({
+  visible,
+  onVisibilityChange,
+}: {
+  visible: boolean;
+  onVisibilityChange?: (visible: boolean) => void;
+}) {
+  useEffect(() => {
+    onVisibilityChange?.(visible);
+  }, [onVisibilityChange, visible]);
+  return null;
 }
 
 const DESKTOP_CODE_SURFACE_QUERY_PARAM = "_agentNativeDesktopCode";
@@ -953,6 +988,10 @@ function AgentPanelInner({
   chatNotice,
   showTabBar = true,
   showPageNewChatButton = false,
+  showPageHeader = false,
+  pageHeaderLeadingSlot,
+  pageToolbarSlot,
+  onPageHeaderVisibilityChange,
   allowSettingsMode = true,
   chatOnly = false,
   agentPageHref,
@@ -1828,60 +1867,134 @@ function AgentPanelInner({
       activeTabId,
       activeTabMessageCount,
       addTab,
+      clearActiveTab,
+      showHistory,
       tabs,
+      toggleHistory,
     }: MultiTabAssistantChatHeaderProps) => {
-      if (
-        !shouldShowAgentPanelPageNewChatButton(
-          tabs,
-          activeTabId,
-          activeTabMessageCount,
-        )
-      ) {
-        return null;
-      }
       const activeTab = activeTabId
         ? tabs.find((tab) => tab.id === activeTabId)
         : undefined;
+      const pageHeaderVisible = shouldShowAgentPanelPageHeader(
+        tabs,
+        activeTabId,
+        activeTabMessageCount,
+        showActivityDemo || showApprovalDemo,
+      );
       const canShareActiveTab =
         activeTab && (activeTabMessageCount > 0 || activeTab.status !== "idle");
+      const showNewChatAction =
+        showPageNewChatButton &&
+        shouldShowAgentPanelPageNewChatButton(
+          tabs,
+          activeTabId,
+          activeTabMessageCount,
+        );
 
       return (
         <>
-          <div
-            aria-hidden="true"
-            data-agent-page-chat-fade=""
-            className="pointer-events-none absolute inset-x-0 top-0 z-50 h-16 bg-gradient-to-b from-background via-background/90 to-transparent opacity-0 transition-opacity duration-150"
+          <PageHeaderVisibilityReporter
+            visible={pageHeaderVisible}
+            onVisibilityChange={onPageHeaderVisibilityChange}
           />
-          <div className="pointer-events-none absolute inset-x-0 top-3 z-[60] flex justify-end px-3 sm:top-4 sm:px-4">
-            <div className="pointer-events-auto flex items-center gap-1">
-              {canShareActiveTab ? (
-                <ShareButton
-                  resourceType="chat_thread"
-                  resourceId={activeTab.id}
-                  allowedRoles={["viewer", "editor", "admin"]}
-                  resourceTitle={activeTab.label || t("agentPanel.chat")}
-                  shareUrl={getChatThreadShareUrl(activeTab.id)}
-                  triggerClassName="h-8 px-2 border border-border bg-background/95 shadow-sm backdrop-blur hover:bg-accent"
-                />
-              ) : null}
-              <button
-                type="button"
-                data-agent-page-new-chat=""
-                aria-label={t("agentPanel.newChat")}
-                onClick={() => {
-                  addTab();
-                }}
-                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background/95 px-2.5 text-xs font-medium text-foreground shadow-sm backdrop-blur transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          {pageHeaderVisible ? (
+            <>
+              <div
+                aria-hidden="true"
+                data-agent-page-chat-fade=""
+                className="agent-kit-page-fade pointer-events-none absolute inset-x-0 h-5 bg-gradient-to-b from-background/80 to-transparent"
+              />
+              <header
+                data-agent-page-chat-header=""
+                className="agent-kit-page-header absolute inset-x-0 top-0 flex items-center gap-3 border-b border-border/70 bg-background/95 px-3 backdrop-blur-sm sm:px-4"
               >
-                <IconPlus size={14} />
-                <span>{t("agentPanel.newChat")}</span>
-              </button>
-            </div>
-          </div>
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                  {pageHeaderLeadingSlot}
+                  <h1 className="truncate text-xs font-medium text-foreground">
+                    {activeTab?.label || t("agentPanel.newChat")}
+                  </h1>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        data-agent-page-title-menu=""
+                        aria-label={t("agentPanel.panelOptions")}
+                        className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:bg-accent data-[state=open]:text-foreground"
+                      >
+                        <IconDotsVertical size={14} />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                      align="start"
+                      sideOffset={5}
+                      className="w-44"
+                    >
+                      {toggleHistory ? (
+                        <DropdownMenuItem onSelect={toggleHistory}>
+                          <IconHistory size={14} className="shrink-0" />
+                          {showHistory
+                            ? t("agentPanel.hideChats")
+                            : t("agentPanel.allChats")}
+                        </DropdownMenuItem>
+                      ) : null}
+                      {activeTabMessageCount > 0 ? (
+                        <DropdownMenuItem onSelect={clearActiveTab}>
+                          <IconX size={14} className="shrink-0" />
+                          {t("agentPanel.clearChat")}
+                        </DropdownMenuItem>
+                      ) : null}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  {activeTab?.status === "running" ? (
+                    <span className="size-1.5 shrink-0 rounded-full bg-muted-foreground/55 animate-pulse motion-reduce:animate-none" />
+                  ) : null}
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  {canShareActiveTab ? (
+                    <ShareButton
+                      resourceType="chat_thread"
+                      resourceId={activeTab.id}
+                      allowedRoles={["viewer", "editor", "admin"]}
+                      resourceTitle={activeTab.label || t("agentPanel.chat")}
+                      shareUrl={getChatThreadShareUrl(activeTab.id)}
+                      triggerContent={
+                        <IconShare3 size={15} aria-hidden="true" />
+                      }
+                      triggerClassName="size-8 p-0 border-0 bg-transparent shadow-none hover:bg-accent/60"
+                    />
+                  ) : null}
+                  {pageToolbarSlot}
+                  {showNewChatAction ? (
+                    <button
+                      type="button"
+                      data-agent-page-new-chat=""
+                      aria-label={t("agentPanel.newChat")}
+                      onClick={() => {
+                        addTab();
+                      }}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background/95 px-2.5 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <IconPlus size={14} />
+                      <span>{t("agentPanel.newChat")}</span>
+                    </button>
+                  ) : null}
+                </div>
+              </header>
+            </>
+          ) : null}
         </>
       );
     },
-    [getChatThreadShareUrl, t],
+    [
+      getChatThreadShareUrl,
+      onPageHeaderVisibilityChange,
+      pageHeaderLeadingSlot,
+      pageToolbarSlot,
+      showActivityDemo,
+      showApprovalDemo,
+      showPageNewChatButton,
+      t,
+    ],
   );
 
   const activeTabResizeObserverRef = useRef<ResizeObserver | null>(null);
@@ -2266,7 +2379,7 @@ function AgentPanelInner({
     <ThinkingDisplayProvider value={assistantChatProps.thinkingDisplay}>
       <div
         className={cn(
-          "agent-panel-root flex flex-1 flex-col min-h-0 h-full text-[13px] leading-[1.2] antialiased",
+          "agent-panel-root agent-kit-density flex flex-1 flex-col min-h-0 h-full antialiased",
           className,
         )}
         style={{
@@ -2289,17 +2402,18 @@ function AgentPanelInner({
               ".agent-tabs-scroll::-webkit-scrollbar{display:none;}" +
               `[data-agent-fullscreen='true'] .agent-thread-content,` +
               `[data-agent-fullscreen='true'] .agent-running-activity{` +
-              `max-width:${FULLSCREEN_CHAT_COLUMN_MAX_PX}px;` +
+              `max-width:var(--agent-kit-conversation-max-width);` +
               `margin-left:auto;margin-right:auto;width:100%;}` +
+              `[data-agent-fullscreen='true'] [data-agent-suggestion-bar='true'],` +
               `[data-agent-fullscreen='true'] .agent-composer-area,` +
               `[data-agent-fullscreen='true'] .agent-plan-mode-callout{` +
-              `max-width:${FULLSCREEN_CHAT_COLUMN_MAX_PX}px;` +
+              `max-width:var(--agent-kit-conversation-max-width);` +
               `margin-left:auto;margin-right:auto;width:100%;}` +
               `[data-agent-fullscreen='true'] .agent-composer-area:not(.agent-composer-area--compact){` +
               `padding-left:0;padding-right:0;}` +
               `[data-agent-fullscreen='true'] .agent-mcp-connection-suggestion--composer,` +
               `[data-agent-fullscreen='true'] .agent-mcp-connection-suggestion-error--composer{` +
-              `max-width:${FULLSCREEN_CHAT_COLUMN_MAX_PX}px;` +
+              `max-width:var(--agent-kit-conversation-max-width);` +
               `margin-left:auto;margin-right:auto;width:100%;}`,
           }}
         />
@@ -2350,41 +2464,44 @@ function AgentPanelInner({
                 />
               }
             >
-              {showActivityDemo ? (
-                <AgentActivityTraceDemo />
-              ) : showApprovalDemo ? (
-                <AgentApprovalCardDemo />
-              ) : (
-                <MultiTabAssistantChatLazy
-                  {...assistantChatProps}
-                  agentChatSurface={effectiveAgentChatSurface}
-                  apiUrl={apiUrl}
-                  showHeader={false}
-                  renderHeader={showHeader ? renderChatHeader : undefined}
-                  showTabBar={showTabBar}
-                  renderOverlay={
-                    showPageNewChatButton && !showHeader
-                      ? renderPageChatOverlay
-                      : undefined
-                  }
-                  contentHidden={mode !== "chat"}
-                  emptyStateText={emptyStateText}
-                  emptyStateAddon={emptyStateAddon}
-                  suggestions={suggestions}
-                  dynamicSuggestions={dynamicSuggestions}
-                  suggestionPlacement="context-chips"
-                  onSwitchToCli={() => switchMode("cli")}
-                  execMode={execMode}
-                  onExecModeChange={switchExecMode}
-                  storageKey={storageKey}
-                  restoreActiveThread={restoreActiveThread}
-                  scope={scope}
-                  isolateHistoryByScope={isolateHistoryByScope}
-                  showScopeBadge={showScopeBadge}
-                  browserTabId={browserTabId}
-                  threadUrlSync={threadUrlSync}
-                />
-              )}
+              <MultiTabAssistantChatLazy
+                {...assistantChatProps}
+                threadContentSlot={
+                  showActivityDemo ? (
+                    <AgentActivityTraceDemo />
+                  ) : showApprovalDemo ? (
+                    <AgentApprovalCardDemo />
+                  ) : (
+                    assistantChatProps.threadContentSlot
+                  )
+                }
+                agentChatSurface={effectiveAgentChatSurface}
+                apiUrl={apiUrl}
+                showHeader={false}
+                renderHeader={showHeader ? renderChatHeader : undefined}
+                showTabBar={showTabBar}
+                renderOverlay={
+                  showPageHeader && !showHeader
+                    ? renderPageChatOverlay
+                    : undefined
+                }
+                contentHidden={mode !== "chat"}
+                emptyStateText={emptyStateText}
+                emptyStateAddon={emptyStateAddon}
+                suggestions={suggestions}
+                dynamicSuggestions={dynamicSuggestions}
+                suggestionPlacement="context-chips"
+                onSwitchToCli={() => switchMode("cli")}
+                execMode={execMode}
+                onExecModeChange={switchExecMode}
+                storageKey={storageKey}
+                restoreActiveThread={restoreActiveThread}
+                scope={scope}
+                isolateHistoryByScope={isolateHistoryByScope}
+                showScopeBadge={showScopeBadge}
+                browserTabId={browserTabId}
+                threadUrlSync={threadUrlSync}
+              />
             </Suspense>
           )}
         </div>
@@ -2497,9 +2614,6 @@ const SIDEBAR_ANIMATION_MS = 260;
 const SIDEBAR_OVERLAY_Z_INDEX = 70;
 const SIDEBAR_DRAWER_Z_INDEX = 80;
 const SIDEBAR_DRAWER_VIEW_TRANSITION_NAME = "agent-native-sidebar-drawer";
-/** Shared max width of the centered fullscreen chat column and composer. */
-const FULLSCREEN_CHAT_COLUMN_MAX_PX = 750;
-
 export function getActiveTabScrollDelta(
   containerRect: Pick<DOMRect, "left" | "right">,
   tabRect: Pick<DOMRect, "left" | "right">,
@@ -3039,8 +3153,14 @@ export interface AgentChatSurfaceProps extends AgentPanelProps {
 }
 
 export function shouldDefaultAgentChatSurfacePageNewChatButton(
-  mode: AgentChatSurfaceMode | undefined,
+  _mode: AgentChatSurfaceMode | undefined,
   _showTabBar: boolean | undefined,
+): boolean {
+  return false;
+}
+
+export function shouldDefaultAgentChatSurfacePageHeader(
+  mode: AgentChatSurfaceMode | undefined,
 ): boolean {
   return mode === "page";
 }
@@ -3069,6 +3189,7 @@ export function AgentChatSurface({
   style,
   chatViewTransition = false,
   showPageNewChatButton,
+  showPageHeader,
   ...props
 }: AgentChatSurfaceProps) {
   const pageMode = mode === "page";
@@ -3088,6 +3209,9 @@ export function AgentChatSurface({
       )}
       showPageNewChatButton={
         showPageNewChatButton ?? defaultShowPageNewChatButton
+      }
+      showPageHeader={
+        showPageHeader ?? shouldDefaultAgentChatSurfacePageHeader(mode)
       }
       className={cn(
         pageMode && "h-full min-h-0 w-full overflow-hidden bg-background",
@@ -4022,7 +4146,7 @@ export function AgentSidebar({
       )}
       <div
         className={cn(
-          "agent-sidebar-panel flex shrink-0 flex-col overflow-hidden text-[13px] leading-[1.2] antialiased",
+          "agent-sidebar-panel agent-kit-density flex shrink-0 flex-col overflow-hidden antialiased",
           chatViewTransition && AGENT_CHAT_VIEW_TRANSITION_CLASS,
         )}
         data-agent-sidebar-animation={

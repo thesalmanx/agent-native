@@ -60,6 +60,22 @@ experience. The left sidebar owns the durable thread list through
 `useChatThreads`; app-specific screens can be added alongside it as nav items
 when they become useful.
 
+The surrounding app shell owns the full-height canvas, global navigation, and
+route-level chrome. `AgentChatSurface` owns the active thread title, the fixed
+conversation/composer column, and the page toolbar. Apps can compose controls
+into that toolbar with `pageToolbarSlot`, or bridge compact navigation into the
+header with `pageHeaderLeadingSlot`, without forking the AgentKit transcript.
+
+This template is also the canonical AgentKit reference surface. Develop and
+verify shared chat UX here first, then use domain apps such as Dispatch as
+consumer smoke tests. Local-only demo states are available at
+`/?agent-demo=complex` for reasoning, tools, and code changes and at
+`/?agent-demo=approval` for human-in-the-loop content. Queue behavior can be
+exercised by submitting follow-ups while a run is active. The shared composer
+remains mounted throughout these states. The route does not provide fallback
+suggestions: contextual next actions appear only when the agent injects them
+through AgentKit's structured `suggestions` input.
+
 For a headless app that later needs UI, this template is the intended landing
 zone: bring the existing actions over, keep their names stable, and let the chat
 call them before adding extra screens. For a custom agent backend, keep the app

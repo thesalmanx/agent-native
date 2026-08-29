@@ -1,0 +1,67 @@
+/**
+ * AgentKit semantic tokens.
+ *
+ * These are role tokens rather than a second generic spacing or color scale.
+ * Applications can override any value at their theme boundary while AgentKit
+ * components keep one density, geometry, motion, and status vocabulary.
+ */
+:root {
+  --agent-kit-conversation-max-width: 46.875rem;
+  --agent-kit-composer-adjacent-inline-inset: 1.5rem;
+
+  --agent-kit-density-font-size: 0.8125rem;
+  --agent-kit-density-line-height: 1.25rem;
+  --agent-kit-supporting-font-size: 0.75rem;
+  --agent-kit-supporting-line-height: 1rem;
+  --agent-kit-caption-font-size: 0.6875rem;
+  --agent-kit-caption-line-height: 1rem;
+  --agent-kit-micro-font-size: 0.625rem;
+  --agent-kit-activity-row-min-height: 1.75rem;
+  --agent-kit-activity-icon-size: 0.875rem;
+  --agent-kit-activity-object-max-width: 60%;
+  --agent-kit-message-bubble-max-width: 92%;
+  --agent-kit-tool-content-max-width: 95%;
+
+  --agent-kit-layer-page-fade: 50;
+  --agent-kit-layer-page-header: 60;
+  --agent-kit-layer-workspace-panel: 70;
+  --agent-kit-page-header-height: 3rem;
+  --agent-kit-workspace-panel-width: 21.25rem;
+  --agent-kit-workspace-panel-max-width: 22.5rem;
+  --agent-kit-workspace-panel-viewport-gutter: 3rem;
+  --agent-kit-workspace-panel-transition-duration: 260ms;
+
+  --agent-kit-composer-block-padding-start: 0.5rem;
+  --agent-kit-composer-block-padding-end: 1rem;
+  --agent-kit-composer-min-height: 4.75rem;
+  --agent-kit-composer-radius: 1.25rem;
+  --agent-kit-composer-border-opacity: 0.75;
+  --agent-kit-composer-focus-border-opacity: 0.9;
+  --agent-kit-composer-border-color: hsl(
+    var(--border) / var(--agent-kit-composer-border-opacity)
+  );
+  --agent-kit-composer-focus-border-color: hsl(
+    var(--border) / var(--agent-kit-composer-focus-border-opacity)
+  );
+  --agent-kit-composer-editor-padding-inline: 1rem;
+  --agent-kit-composer-editor-padding-block-start: 0.875rem;
+  --agent-kit-composer-editor-padding-block-end: 0.125rem;
+  --agent-kit-composer-editor-min-height: 2.75rem;
+  --agent-kit-composer-editor-max-height: 12rem;
+  --agent-kit-composer-font-size: 0.875rem;
+  --agent-kit-composer-line-height: 1.25rem;
+  --agent-kit-composer-mobile-font-size: 1rem;
+  --agent-kit-composer-mobile-line-height: 1.5rem;
+  --agent-kit-composer-toolbar-padding-inline: 1rem;
+  --agent-kit-composer-toolbar-padding-block-start: 0.25rem;
+  --agent-kit-composer-toolbar-padding-block-end: 0.5rem;
+  --agent-kit-composer-control-size: 2rem;
+  --agent-kit-composer-elevation: 0 0.5rem 1.875rem
+    hsl(var(--foreground) / 0.06);
+
+  --agent-kit-positive: 142 72% 38%;
+}
+
+.dark {
+  --agent-kit-positive: 142 62% 56%;
+}

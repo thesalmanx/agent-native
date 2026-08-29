@@ -1054,6 +1054,24 @@ describe("ToolCallDisplay native renderers", () => {
     const row = container.querySelector("button")?.parentElement;
     expect(row?.className).toContain("w-full");
     expect(container.querySelector("button")?.className).toContain("w-full");
+    expect(container.textContent).toContain("recent deals");
+  });
+
+  it("shows the command itself in a generic command row", () => {
+    act(() => {
+      root.render(
+        <ToolCallDisplay
+          toolName="exec-command"
+          args={{ cmd: "pnpm test --filter @agent-native/core" }}
+          isRunning={false}
+        />,
+      );
+    });
+
+    expect(container.textContent).toContain("exec command");
+    expect(container.textContent).toContain(
+      "pnpm test --filter @agent-native/core",
+    );
   });
 
   it("expands inputs inline and opens output in a popover", () => {

@@ -56,10 +56,12 @@ import {
   humanizeToolName,
   isCallAgentToolCallShadowed,
   isToolCallActive,
+  resolveToolCallRowContext,
 } from "../tool-display.js";
 import { useAgentChatContext } from "../use-agent-chat-context.js";
 import { cn } from "../utils.js";
 import { ActionChatUiSurface } from "./action-chat-ui-surface.js";
+import { AgentActivityObject } from "./agent-activity-object.js";
 import { AgentApprovalCard } from "./agent-approval-card.js";
 import {
   SmoothMarkdownText,
@@ -202,7 +204,7 @@ export function ToolActivityPresentation({
       <div className="agent-tool-call__content">
         {children}
         {isRunning && showLongRunningHint && (
-          <div className="mt-0.5 px-2.5 pb-2 text-[11px] leading-snug text-muted-foreground/80">
+          <div className="agent-kit-caption-copy mt-0.5 px-2.5 pb-2 leading-snug text-muted-foreground/80">
             {t("agentChat.tool.longRunning")}
           </div>
         )}
@@ -430,14 +432,14 @@ function SimpleCodeViewer({
   return (
     <div
       className={cn(
-        "agent-tool-code overflow-auto rounded-md bg-muted/70 font-mono text-[11px] leading-relaxed text-foreground",
+        "agent-tool-code agent-kit-caption-copy overflow-auto rounded-md bg-muted/70 font-mono leading-relaxed text-foreground",
         maxHeightClass,
         className,
       )}
     >
       {lang !== "text" && (
         <div className="sticky top-0 z-[1] flex items-center justify-between border-b border-border/40 bg-muted/90 px-2.5 py-1">
-          <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground/80">
+          <span className="agent-kit-micro-copy font-mono uppercase tracking-wide text-muted-foreground/80">
             {lang}
           </span>
         </div>
@@ -803,6 +805,8 @@ export function ToolCallDisplay({
   );
 }
 
+const WorkSummaryContentContext = React.createContext(false);
+
 function ToolCallDisplayGeneric({
   toolName,
   toolCallId,
@@ -840,6 +844,7 @@ function ToolCallDisplayGeneric({
   context?: string;
 }) {
   const t = useT();
+  const embeddedInWorkSummary = React.useContext(WorkSummaryContentContext);
   const suppressInlineOpenApp = React.useContext(SuppressInlineOpenAppContext);
   const isRawCallAgent = toolName === "call-agent";
   const isAgentCall = toolName.startsWith("agent:") || isRawCallAgent;
@@ -989,6 +994,7 @@ function ToolCallDisplayGeneric({
         ? t("agentChat.tool.askingAgentFailed", { agent: agentName })
         : t("agentChat.tool.askedAgent", { agent: agentName })
     : humanizeToolName(toolName);
+  const rowContext = isAgentCall ? null : resolveToolCallRowContext(args);
 
   const canExpand = isAgentCall
     ? hasStreamText
@@ -1026,7 +1032,7 @@ function ToolCallDisplayGeneric({
         onClick={() => canExpand && setExpanded(!isExpanded)}
         aria-expanded={canExpand ? isExpanded : undefined}
         className={cn(
-          "flex w-full items-center gap-1.5 rounded-md py-0.5 text-left text-[13px] text-muted-foreground transition-colors",
+          "agent-kit-density flex w-full items-center gap-1.5 rounded-md py-0.5 text-left text-muted-foreground transition-colors",
           canExpand && "hover:text-foreground",
           isRunning && "text-muted-foreground",
         )}
@@ -1065,9 +1071,19 @@ function ToolCallDisplayGeneric({
         >
           {displayName}
         </span>
+        {rowContext ? (
+          <AgentActivityObject
+            object={{
+              kind: rowContext.kind,
+              label: rowContext.text,
+              mono: rowContext.mono,
+            }}
+            className="agent-kit-activity-object-boundary ms-auto shrink"
+          />
+        ) : null}
         {repeatCount && repeatCount > 1 && (
           <span
-            className="shrink-0 rounded border border-border/60 px-1.5 py-0.5 text-[10px] leading-none text-muted-foreground"
+            className="agent-kit-micro-copy shrink-0 rounded border border-border/60 px-1.5 py-0.5 leading-none text-muted-foreground"
             title={t("agentChat.tool.repeated", { count: repeatCount })}
           >
             {repeatCount}x
@@ -1077,7 +1093,7 @@ function ToolCallDisplayGeneric({
       <AnimatedCollapse
         open={isExpanded && !isAgentCall && (hasArgs || result !== undefined)}
       >
-        <div className="mt-1 space-y-2 pl-5">
+        <div className={cn("mt-1 space-y-2", !embeddedInWorkSummary && "pl-5")}>
           {inputPayload && (
             <SimpleCodeViewer
               text={inputPayload.text}
@@ -1105,7 +1121,13 @@ function ToolCallDisplayGeneric({
         </div>
       </AnimatedCollapse>
       {isUnknownOutcome && (
-        <p role="status" className="ps-5 text-xs text-muted-foreground">
+        <p
+          role="status"
+          className={cn(
+            "text-xs text-muted-foreground",
+            !embeddedInWorkSummary && "ps-5",
+          )}
+        >
           {t("agentChat.tool.interrupted")}
         </p>
       )}
@@ -1175,7 +1197,7 @@ function AgentCallCell({
       ? t("agentChat.tool.askingAgentFailed", { agent: agentName })
       : t("agentChat.tool.askedAgent", { agent: agentName });
   const workContent = work ? (
-    <div className="space-y-1 ps-5">
+    <div className="space-y-1">
       {Array.from({ length: workItemCount }, (_, index) => {
         const reasoningText = activity?.reasoning?.[index];
         const segment = inlineSegments[index];
@@ -1240,7 +1262,7 @@ function AgentCallCell({
         type="button"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
-        className="flex w-full items-center gap-1.5 rounded-md py-0.5 text-left text-[13px] text-muted-foreground transition-colors hover:text-foreground"
+        className="agent-kit-density flex w-full items-center gap-1.5 rounded-md py-0.5 text-left text-muted-foreground transition-colors hover:text-foreground"
       >
         {isRunning ? (
           <IconLoader2 className="size-3.5 animate-spin" />
@@ -1261,7 +1283,7 @@ function AgentCallCell({
         </span>
       </button>
       <AnimatedCollapse open={open}>
-        <div className="ms-1 border-s border-border/50 ps-2 pt-1">
+        <div className="pt-1">
           {workContent &&
             (isRunning ? (
               workContent
@@ -1272,7 +1294,7 @@ function AgentCallCell({
             ))}
           {progressText && (
             <p
-              className="ps-5 pb-1 text-xs text-muted-foreground"
+              className="pb-1 text-xs text-muted-foreground"
               data-testid="agent-call-progress"
               aria-live="polite"
             >
@@ -1280,7 +1302,7 @@ function AgentCallCell({
             </p>
           )}
           {finalText && (
-            <div className="ps-5 pb-1">
+            <div className="pb-1">
               <SmoothMarkdownText
                 text={finalText}
                 streaming={isRunning}
@@ -1312,7 +1334,7 @@ function AgentActivityToolCallRow({
       toolCallId={tool.id}
       suppressLongRunningHint
     >
-      <div className="my-0.5 flex w-full items-center gap-1.5 rounded-md py-0.5 text-left text-[13px] text-muted-foreground">
+      <div className="agent-kit-density my-0.5 flex w-full items-center gap-1.5 rounded-md py-0.5 text-left text-muted-foreground">
         <span className="flex size-4 shrink-0 items-center justify-center">
           {isRunning ? (
             <IconLoader2 className="size-3.5 animate-spin" />
@@ -1522,7 +1544,7 @@ export function ReconnectStreamMessage({
 
   return (
     <div className="flex justify-start">
-      <div className="w-full max-w-[95%] text-sm leading-relaxed text-foreground">
+      <div className="agent-kit-tool-content-boundary w-full text-sm leading-relaxed text-foreground">
         <ToolCallStackMotion className="space-y-1">
           {renderedParts}
         </ToolCallStackMotion>
@@ -1608,8 +1630,6 @@ function isReconnectToolSummaryPart(
  * calls it sits between are collapsible there, and reasoning that could not be
  * collapsed was the longest thing in an opened summary by far.
  */
-const WorkSummaryContentContext = React.createContext(false);
-
 export function ReasoningCell({
   text,
   isStreaming = false,
@@ -1693,7 +1713,7 @@ export function ReasoningCell({
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex items-center gap-1.5 py-0.5 text-[13px] text-muted-foreground transition-colors hover:text-foreground"
+        className="agent-kit-density flex items-center gap-1.5 py-0.5 text-muted-foreground transition-colors hover:text-foreground"
       >
         <IconChevronRight
           className={cn(
@@ -1708,13 +1728,19 @@ export function ReasoningCell({
         )}
       </button>
       <AnimatedCollapse open={open}>
-        <div className={cn("ps-5 pb-1", showTail && "reasoning-cell-tail")}>
+        <div
+          className={cn(
+            "pb-1",
+            !embeddedInWorkSummary && "ps-5",
+            showTail && "reasoning-cell-tail",
+          )}
+        >
           {trimmed ? (
             // Reasoning summaries arrive as markdown — OpenAI's carry `**bold**`
             // headers — so a pre-wrap block shows the source characters. Smoothing
             // stays off: a second character-level queue lags the model and makes
             // the surrounding chat jump.
-            <div className="agent-reasoning-markdown text-[13px] leading-relaxed text-muted-foreground">
+            <div className="agent-reasoning-markdown agent-kit-density leading-relaxed text-muted-foreground">
               <SmoothMarkdownText
                 text={trimmed}
                 streaming={isStreaming}
@@ -1724,7 +1750,7 @@ export function ReasoningCell({
               />
             </div>
           ) : (
-            <div className="text-[13px] leading-relaxed text-muted-foreground">
+            <div className="agent-kit-density leading-relaxed text-muted-foreground">
               {isStreaming ? "…" : ""}
             </div>
           )}
@@ -1822,7 +1848,7 @@ export function WorkedForSummary({
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex items-center gap-1.5 py-0.5 text-[13px] text-muted-foreground transition-colors hover:text-foreground"
+        className="agent-kit-density flex items-center gap-1.5 py-0.5 text-muted-foreground transition-colors hover:text-foreground"
       >
         <span>{label}</span>
         <IconChevronRight
@@ -1863,7 +1889,7 @@ export function RanToolsSummary({
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex items-center gap-1.5 py-0.5 text-[13px] text-muted-foreground transition-colors hover:text-foreground"
+        className="agent-kit-density flex items-center gap-1.5 py-0.5 text-muted-foreground transition-colors hover:text-foreground"
       >
         <span className="agent-tool-summary__label">{label}</span>
         <IconChevronRight

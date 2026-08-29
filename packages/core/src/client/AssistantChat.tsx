@@ -109,8 +109,8 @@ import {
   writeAssistantChatComposerDraft,
 } from "./chat/composer-draft.js";
 import {
+  AgentTextStreamingProvider,
   ExternalTextStreamingContext,
-  TextStreamingContext,
 } from "./chat/markdown-renderer.js";
 import {
   CheckpointContext,
@@ -208,7 +208,6 @@ import {
   consumeMcpConnectionResume,
   type McpConnectionResumeRequest,
 } from "./resources/mcp-connection-resume.js";
-import { McpConnectionSuggestion } from "./resources/McpConnectionSuggestion.js";
 import {
   claimRunStream,
   createRunStreamToken,
@@ -1973,6 +1972,17 @@ export type AssistantChatThreadFooterSlot =
       tabId: string | null;
     }) => React.ReactNode);
 
+export type AssistantChatSuggestionVisibility =
+  | "always"
+  | "after-agent-response";
+
+export function shouldShowAssistantChatSuggestions(
+  visibility: AssistantChatSuggestionVisibility,
+  hasAssistantMessage: boolean,
+): boolean {
+  return visibility === "always" || hasAssistantMessage;
+}
+
 export interface AssistantChatAdapterContext {
   apiUrl: string;
   tabId?: string;
@@ -2024,6 +2034,10 @@ export interface AssistantChatProps {
   dynamicSuggestions?: AgentDynamicSuggestionsOption;
   /** Where suggestions appear. The panel uses a next-action bar at the thread base. */
   suggestionPlacement?: "empty-state" | "context-chips" | "hidden";
+  /** When suggestions become visible. Full-page chat can defer them until the agent has replied. */
+  suggestionVisibility?: AssistantChatSuggestionVisibility;
+  /** Optional content rendered as part of the conversation before persisted messages. */
+  threadContentSlot?: AssistantChatThreadFooterSlot;
   /** Optional content rendered at the bottom of the scrollable thread, after messages. */
   threadFooterSlot?: AssistantChatThreadFooterSlot;
   /** Optional content rendered in the empty state, above the suggestion buttons. */
@@ -2493,6 +2507,8 @@ const AssistantChatInner = forwardRef<
     suggestions,
     dynamicSuggestions,
     suggestionPlacement = "empty-state",
+    suggestionVisibility = "always",
+    threadContentSlot,
     threadFooterSlot,
     emptyStateAddon,
     showHeader = true,
@@ -2575,6 +2591,10 @@ const AssistantChatInner = forwardRef<
   const isRuntimeRunningRef = useRef(isRuntimeRunning);
   isRuntimeRunningRef.current = isRuntimeRunning;
   const messages = thread.messages;
+  const showSuggestions = shouldShowAssistantChatSuggestions(
+    suggestionVisibility,
+    messages.some((message) => message.role === "assistant"),
+  );
   // Latest-value ref (same pattern as isRuntimeRunningRef above) so the
   // `hasInFlightWork` imperative handle method — called from outside React's
   // render cycle by RunStuckBanner right before a destructive Retry — always
@@ -2630,16 +2650,13 @@ const AssistantChatInner = forwardRef<
     () => readAssistantChatComposerDraft(composerDraftScope),
     [composerDraftScope],
   );
-  const [composerText, setComposerText] = useState(initialComposerText ?? "");
   useEffect(() => {
     const restoredText = initialComposerText ?? "";
-    setComposerText(restoredText);
     if (!isActiveComposer) return;
     onComposerTextChange?.(restoredText);
   }, [initialComposerText, isActiveComposer, onComposerTextChange]);
   const handleComposerTextChange = useCallback(
     (text: string) => {
-      setComposerText(text);
       writeAssistantChatComposerDraft(composerDraftScope, text);
       onComposerTextChange?.(text);
     },
@@ -3036,6 +3053,28 @@ const AssistantChatInner = forwardRef<
     (activeRunMatchesThread(storedActiveRun, threadId)
       ? storedActiveRun?.turnId
       : undefined) ?? (showRunningInUI ? reconnectTurnIdRef.current : null);
+  const textStreamingThreadId = threadId ?? null;
+  const [retainedTextStreamingState, setRetainedTextStreamingState] = useState<{
+    threadId: string | null;
+    identity: { runId: string | null; turnId: string | null } | null;
+  }>(() => ({ threadId: textStreamingThreadId, identity: null }));
+  useEffect(() => {
+    setRetainedTextStreamingState((current) => {
+      if (activeChatRunId || activeChatTurnId) {
+        return {
+          threadId: textStreamingThreadId,
+          identity: { runId: activeChatRunId, turnId: activeChatTurnId },
+        };
+      }
+      return current.threadId === textStreamingThreadId
+        ? current
+        : { threadId: textStreamingThreadId, identity: null };
+    });
+  }, [activeChatRunId, activeChatTurnId, textStreamingThreadId]);
+  const activeTextStreamingIdentity =
+    retainedTextStreamingState.threadId === textStreamingThreadId
+      ? retainedTextStreamingState.identity
+      : null;
   const chatRunStartedAtRef = useRef<number | null>(null);
   const chatRunTurnIdRef = useRef<string | null>(null);
   const [lastChatRunDurationMs, setLastChatRunDurationMs] = useState<
@@ -5928,9 +5967,18 @@ const AssistantChatInner = forwardRef<
           tabId: tabId ?? null,
         })
       : threadFooterSlot;
+  const resolvedThreadContentSlot =
+    typeof threadContentSlot === "function"
+      ? threadContentSlot({
+          threadId: threadId ?? null,
+          tabId: tabId ?? null,
+        })
+      : threadContentSlot;
+  const hasThreadContentSlot = Boolean(resolvedThreadContentSlot);
   const hasThreadFooterSlot = Boolean(resolvedThreadFooterSlot);
   const isFreshEmptyChat =
     messages.length === 0 &&
+    !hasThreadContentSlot &&
     !hasActiveChatWork &&
     !isRestoring &&
     !isReconnecting &&
@@ -5945,7 +5993,10 @@ const AssistantChatInner = forwardRef<
   const centeredEmptyState =
     centerComposerWhenEmpty && (isFreshEmptyChat || centeredRestoringState);
   const showEmptyState =
-    messages.length === 0 && !isReconnecting && !hasActiveChatWork;
+    messages.length === 0 &&
+    !hasThreadContentSlot &&
+    !isReconnecting &&
+    !hasActiveChatWork;
   const showInlineEmptyThreadFooterSlot =
     showEmptyState &&
     !centeredEmptyState &&
@@ -6134,7 +6185,10 @@ const AssistantChatInner = forwardRef<
                       // ownership below.
                       value={showRunningInUI || runErrorInfo !== null}
                     >
-                      <TextStreamingContext.Provider value={textStreaming}>
+                      <AgentTextStreamingProvider
+                        identity={activeTextStreamingIdentity}
+                        streaming={textStreaming}
+                      >
                         <div
                           data-agent-empty-state={
                             centeredEmptyState
@@ -6321,7 +6375,8 @@ const AssistantChatInner = forwardRef<
                                         t("agentChat.empty.prompt")}
                                     </p>
                                     {emptyStateAddon}
-                                    {suggestionPlacement === "empty-state" &&
+                                    {showSuggestions &&
+                                    suggestionPlacement === "empty-state" &&
                                     resolvedSuggestions &&
                                     resolvedSuggestions.length > 0 ? (
                                       <div className="flex w-full max-w-[320px] flex-col gap-1.5">
@@ -6350,6 +6405,13 @@ const AssistantChatInner = forwardRef<
                                   </div>
                                 ) : (
                                   <MessageScrollerContent className="agent-thread-content gap-4 px-4 py-4">
+                                    {resolvedThreadContentSlot ? (
+                                      <MessageScrollerItem>
+                                        <div className="agent-thread-content-slot">
+                                          {resolvedThreadContentSlot}
+                                        </div>
+                                      </MessageScrollerItem>
+                                    ) : null}
                                     {threadRestoreErrorSurface ? (
                                       <MessageScrollerItem>
                                         {threadRestoreErrorSurface}
@@ -6516,9 +6578,6 @@ const AssistantChatInner = forwardRef<
                           </MessageScrollerProvider>
 
                           {showComposerSlot ? composerSlot : null}
-                          {isActiveComposer && (
-                            <McpConnectionSuggestion text={composerText} />
-                          )}
                           {showCenteredEmptyThreadFooterSlot ? (
                             <div className="agent-thread-footer-slot agent-thread-footer-slot--centered-empty">
                               {resolvedThreadFooterSlot}
@@ -6534,13 +6593,17 @@ const AssistantChatInner = forwardRef<
                                   ? { title: guidedQuestionsTitle }
                                   : {})}
                                 {...(guidedQuestionsDescription
-                                  ? { description: guidedQuestionsDescription }
+                                  ? {
+                                      description: guidedQuestionsDescription,
+                                    }
                                   : {})}
                                 {...(guidedQuestionsSkipLabel
                                   ? { skipLabel: guidedQuestionsSkipLabel }
                                   : {})}
                                 {...(guidedQuestionsSubmitLabel
-                                  ? { submitLabel: guidedQuestionsSubmitLabel }
+                                  ? {
+                                      submitLabel: guidedQuestionsSubmitLabel,
+                                    }
                                   : {})}
                                 className="h-auto items-stretch justify-stretch bg-transparent"
                               />
@@ -6566,7 +6629,8 @@ const AssistantChatInner = forwardRef<
                               </button>
                             </div>
                           )}
-                          {suggestionPlacement === "context-chips" &&
+                          {showSuggestions &&
+                          suggestionPlacement === "context-chips" &&
                           resolvedSuggestionInputs &&
                           resolvedSuggestionInputs.length > 0 ? (
                             <AgentSuggestionBar
@@ -6829,7 +6893,7 @@ const AssistantChatInner = forwardRef<
                             </PromptBar>
                           </div>
                         </div>
-                      </TextStreamingContext.Provider>
+                      </AgentTextStreamingProvider>
                     </ChatRunningContext.Provider>
                   </ChatRunningTurnIdContext.Provider>
                 </ChatRunningRunIdContext.Provider>

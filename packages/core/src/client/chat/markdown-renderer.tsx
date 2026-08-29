@@ -156,6 +156,74 @@ export function loadHighlighter(): Promise<ShikiHighlighter> {
 export const TextStreamingContext = React.createContext(false);
 export const ExternalTextStreamingContext = React.createContext(false);
 
+export interface ActiveTextStreamingIdentity {
+  runId: string | null;
+  turnId: string | null;
+}
+
+export const ActiveTextStreamingIdentityContext =
+  React.createContext<ActiveTextStreamingIdentity | null>(null);
+
+export function AgentTextStreamingProvider({
+  children,
+  identity,
+  streaming,
+}: {
+  children: React.ReactNode;
+  identity: ActiveTextStreamingIdentity | null;
+  streaming: boolean;
+}) {
+  return (
+    <ActiveTextStreamingIdentityContext.Provider value={identity}>
+      <TextStreamingContext.Provider value={streaming}>
+        {children}
+      </TextStreamingContext.Provider>
+    </ActiveTextStreamingIdentityContext.Provider>
+  );
+}
+
+function messageStreamingIdentity(
+  message: unknown,
+): ActiveTextStreamingIdentity {
+  const metadata = (message as { metadata?: unknown })?.metadata as
+    | {
+        custom?: { runId?: unknown; turnId?: unknown };
+        runId?: unknown;
+        turnId?: unknown;
+      }
+    | undefined;
+  return {
+    runId:
+      typeof metadata?.custom?.runId === "string"
+        ? metadata.custom.runId
+        : typeof metadata?.runId === "string"
+          ? metadata.runId
+          : null,
+    turnId:
+      typeof metadata?.custom?.turnId === "string"
+        ? metadata.custom.turnId
+        : typeof metadata?.turnId === "string"
+          ? metadata.turnId
+          : null,
+  };
+}
+
+export function messageMatchesActiveTextStream(
+  message: unknown,
+  activeIdentity: ActiveTextStreamingIdentity | null,
+): boolean {
+  if (!activeIdentity) return false;
+  const messageIdentity = messageStreamingIdentity(message);
+  if (activeIdentity.turnId && messageIdentity.turnId) {
+    return activeIdentity.turnId === messageIdentity.turnId;
+  }
+  return Boolean(
+    activeIdentity.runId &&
+    messageIdentity.runId &&
+    activeIdentity.runId === messageIdentity.runId,
+  );
+}
+
 // ─── HighlightedCodeBlock wrapper ────────────────────────────────────────────
 // Reads streaming state from context so markdownComponents (a static constant)
 // can opt into debounced highlighting without needing to rebuild on every render.
@@ -807,16 +875,19 @@ export function shouldAnimateMarkdownText({
   isLastAssistantMessage,
   statusType,
   externalStreaming,
+  activeMessageStreaming,
 }: {
   textStreaming: boolean;
   isLastAssistantMessage: boolean;
   statusType: string;
   externalStreaming?: boolean;
+  activeMessageStreaming?: boolean;
 }): boolean {
   return (
-    textStreaming &&
     isLastAssistantMessage &&
-    (statusType === "running" || externalStreaming === true)
+    (activeMessageStreaming === true ||
+      (textStreaming &&
+        (statusType === "running" || externalStreaming === true)))
   );
 }
 
@@ -827,6 +898,9 @@ export function MarkdownText() {
   const message = messageRuntime.getState();
   const textStreaming = React.useContext(TextStreamingContext);
   const externalStreaming = React.useContext(ExternalTextStreamingContext);
+  const activeStreamingIdentity = React.useContext(
+    ActiveTextStreamingIdentityContext,
+  );
   const isLastAssistantMessage = message.role === "assistant" && message.isLast;
   const statusType =
     textPart.status?.type ?? message.status?.type ?? "complete";
@@ -839,6 +913,10 @@ export function MarkdownText() {
         isLastAssistantMessage,
         statusType,
         externalStreaming,
+        activeMessageStreaming: messageMatchesActiveTextStream(
+          message,
+          activeStreamingIdentity,
+        ),
       })}
       resetKey={message.id}
       statusType={statusType}

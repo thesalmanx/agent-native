@@ -8,6 +8,7 @@ import { splitMarkdownBlocks } from "../../shared/markdown-block-split.js";
 import {
   loadMarkdown,
   markdownComponents,
+  messageMatchesActiveTextStream,
   onMarkdownReady,
   shouldAnimateMarkdownText,
   SmoothMarkdownText,
@@ -67,6 +68,36 @@ describe("shouldAnimateMarkdownText", () => {
         externalStreaming: true,
       }),
     ).toBe(true);
+  });
+
+  it("animates a complete text part that belongs to the active AgentKit turn", () => {
+    expect(
+      shouldAnimateMarkdownText({
+        textStreaming: false,
+        isLastAssistantMessage: true,
+        statusType: "complete",
+        activeMessageStreaming: true,
+      }),
+    ).toBe(true);
+  });
+
+  it("matches active turns before continuation run ids", () => {
+    expect(
+      messageMatchesActiveTextStream(
+        {
+          metadata: {
+            custom: { runId: "run-2", turnId: "turn-current" },
+          },
+        },
+        { runId: "run-1", turnId: "turn-current" },
+      ),
+    ).toBe(true);
+    expect(
+      messageMatchesActiveTextStream(
+        { metadata: { runId: "run-current", turnId: "turn-previous" } },
+        { runId: "run-current", turnId: "turn-current" },
+      ),
+    ).toBe(false);
   });
 });
 

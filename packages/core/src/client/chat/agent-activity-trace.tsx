@@ -3,15 +3,29 @@ import {
   IconCheck,
   IconChevronRight,
   IconCode,
+  IconFileDiff,
+  IconFileText,
   IconPencil,
   IconSearch,
+  IconTerminal2,
   IconTool,
 } from "@tabler/icons-react";
 import React, { useState } from "react";
 
 import { cn } from "../utils.js";
+import {
+  AgentActivityObject,
+  type AgentActivityObjectReference,
+} from "./agent-activity-object.js";
 
-export type AgentActivityVariant = "steps" | "reasoning" | "search" | "coding";
+export type AgentActivityVariant =
+  | "steps"
+  | "reasoning"
+  | "search"
+  | "coding"
+  | "changes"
+  | "command"
+  | "read";
 export type AgentActivityDisplayMode = "status" | "timeline" | "auto";
 
 export type AgentActivityStatus = "running" | "complete" | "error";
@@ -20,6 +34,7 @@ export interface AgentActivityItem {
   id: string;
   label: string;
   detail?: string;
+  object?: AgentActivityObjectReference;
   summary?: React.ReactNode;
   variant?: AgentActivityVariant;
   status?: AgentActivityStatus;
@@ -27,7 +42,7 @@ export interface AgentActivityItem {
 
 export interface AgentActivityTraceProps {
   items: AgentActivityItem[];
-  summary: string;
+  summary?: string;
   activeSummary?: string;
   variant?: AgentActivityVariant;
   running?: boolean;
@@ -36,8 +51,23 @@ export interface AgentActivityTraceProps {
   children?: React.ReactNode;
 }
 
+export function summarizeAgentActivityItems(
+  items: readonly AgentActivityItem[],
+): string {
+  const labels = Array.from(
+    new Set(items.map((item) => item.label.trim()).filter(Boolean)),
+  );
+  if (labels.length === 0) return "Working";
+  const visibleLabels = labels.slice(0, 2);
+  visibleLabels[0] =
+    visibleLabels[0]!.charAt(0).toUpperCase() + visibleLabels[0]!.slice(1);
+  const visible = visibleLabels.join(", ");
+  const remaining = labels.length - 2;
+  return remaining > 0 ? `${visible} +${remaining}` : visible;
+}
+
 function ActivityIcon({ item }: { item: AgentActivityItem }) {
-  const iconClass = "size-3.5 shrink-0";
+  const iconClass = "agent-kit-activity-icon shrink-0";
   if (item.status === "error") return <IconTool className={iconClass} />;
   switch (item.variant) {
     case "reasoning":
@@ -46,6 +76,12 @@ function ActivityIcon({ item }: { item: AgentActivityItem }) {
       return <IconSearch className={iconClass} />;
     case "coding":
       return <IconCode className={iconClass} />;
+    case "changes":
+      return <IconFileDiff className={iconClass} />;
+    case "command":
+      return <IconTerminal2 className={iconClass} />;
+    case "read":
+      return <IconFileText className={iconClass} />;
     case "steps":
       return <IconCheck className={iconClass} />;
     default:
@@ -91,23 +127,14 @@ export function AgentActivityTrace({
   activeSummary,
   variant = "steps",
   running = false,
-  displayMode = "timeline",
   defaultOpen = false,
   children,
 }: AgentActivityTraceProps) {
   const [open, setOpen] = useState(defaultOpen);
-  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
-  const visibleSummary = running && activeSummary ? activeSummary : summary;
-  const visibleItems =
-    displayMode === "status" || (displayMode === "auto" && running)
-      ? items.slice(-1)
-      : items.slice(0, 5);
-  const selectedItem = items.find((item) => item.id === selectedItemId);
-
-  const toggleItem = (itemId: string) => {
-    setSelectedItemId((current) => (current === itemId ? null : itemId));
-    setOpen(true);
-  };
+  const visibleSummary =
+    running && activeSummary
+      ? activeSummary
+      : (summary ?? summarizeAgentActivityItems(items));
 
   return (
     <div
@@ -115,24 +142,15 @@ export function AgentActivityTrace({
       data-agent-activity-variant={variant}
       data-agent-activity-running={running ? "true" : undefined}
     >
-      <div className="flex min-w-0 items-center gap-2 py-1 text-left text-[13px] text-muted-foreground">
-        <span className="agent-activity-trace__icons flex shrink-0 items-center">
-          {visibleItems.map((item, index) => (
-            <AgentActivityChip
-              key={item.id}
-              item={item}
-              index={index}
-              selected={selectedItemId === item.id}
-              onSelect={(selected) => toggleItem(selected.id)}
-            />
-          ))}
-        </span>
-        <button
-          type="button"
-          aria-expanded={open}
-          onClick={() => setOpen((current) => !current)}
-          className="flex min-w-0 flex-1 items-center gap-2 rounded-md text-left transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
+      <button
+        type="button"
+        aria-label={visibleSummary}
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+        className="agent-kit-activity-row flex min-w-0 items-center gap-2 rounded-md py-1 text-left text-muted-foreground transition-colors hover:text-foreground focus-visible:bg-muted/50 focus-visible:text-foreground focus-visible:outline-none"
+      >
+        <IconTool className="agent-kit-activity-icon shrink-0" />
+        <span className="flex min-w-0 items-center gap-2">
           <span
             className={cn(
               "min-w-0 truncate font-medium",
@@ -145,39 +163,88 @@ export function AgentActivityTrace({
           </span>
           <IconChevronRight
             className={cn(
-              "size-3.5 shrink-0 transition-transform",
+              "agent-kit-activity-icon shrink-0 transition-transform",
               open && "rotate-90",
             )}
           />
-        </button>
-      </div>
+        </span>
+      </button>
       {open ? (
-        <div
-          className={cn(
-            "agent-activity-trace__details pt-1",
-            selectedItem
-              ? "border-s border-border/70"
-              : "border-s border-border/70 ps-4",
-          )}
-        >
-          {selectedItem ? (
-            <div className="rounded-md bg-muted/35 px-3 py-2 text-xs text-foreground">
-              {selectedItem.summary ? (
-                selectedItem.summary
-              ) : (
-                <>
-                  <div className="font-medium">{selectedItem.label}</div>
-                  {selectedItem.detail ? (
-                    <div className="mt-1 text-muted-foreground">
-                      {selectedItem.detail}
-                    </div>
-                  ) : null}
-                </>
-              )}
+        <div className="agent-activity-trace__details pt-1">
+          {children ? (
+            <div>{children}</div>
+          ) : (
+            <div className="flex flex-col gap-0.5">
+              {items.map((item) => (
+                <AgentActivityDisclosureItem key={item.id} item={item} />
+              ))}
             </div>
-          ) : children ? (
-            <div className="pt-2">{children}</div>
-          ) : null}
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function AgentActivityDisclosureItem({ item }: { item: AgentActivityItem }) {
+  const [open, setOpen] = useState(false);
+  const canExpand = item.summary != null;
+  const labelContent = (
+    <>
+      <ActivityIcon item={item} />
+      <span
+        className={cn(
+          "min-w-0 truncate",
+          item.status === "running" && "agent-running-shimmer",
+        )}
+      >
+        {item.label}
+      </span>
+    </>
+  );
+
+  return (
+    <div className="min-w-0">
+      <div className="agent-kit-activity-row flex w-full min-w-0 items-center gap-2 text-muted-foreground">
+        {canExpand ? (
+          <button
+            type="button"
+            aria-expanded={open}
+            onClick={() => setOpen((current) => !current)}
+            className="flex min-w-0 flex-1 items-center gap-2 rounded-md text-left transition-colors hover:text-foreground focus-visible:bg-muted/50 focus-visible:text-foreground focus-visible:outline-none"
+          >
+            {labelContent}
+          </button>
+        ) : (
+          <div className="flex min-w-0 flex-1 items-center gap-2 text-left">
+            {labelContent}
+          </div>
+        )}
+        {item.object ? (
+          <AgentActivityObject
+            object={item.object}
+            className="agent-kit-activity-object-boundary shrink"
+          />
+        ) : item.detail ? (
+          <span className="agent-kit-activity-object-boundary ms-auto shrink truncate text-right text-muted-foreground/65">
+            {item.detail}
+          </span>
+        ) : null}
+        {canExpand ? (
+          <IconChevronRight
+            className={cn(
+              "agent-kit-activity-icon shrink-0 transition-transform",
+              open && "rotate-90",
+            )}
+          />
+        ) : null}
+      </div>
+      {canExpand && open ? (
+        <div
+          data-agent-activity-item-details=""
+          className="agent-kit-density py-1 text-foreground"
+        >
+          {item.summary}
         </div>
       ) : null}
     </div>

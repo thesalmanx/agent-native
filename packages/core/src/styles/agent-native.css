@@ -26,6 +26,7 @@
 @import "./rich-markdown-editor.css";
 @import "./blocks.css";
 @import "./chat-history-list.css";
+@import "./tokens/agent-kit.css";
 
 /* Core's own client components (settings, TeamPage, share dialogs, …) render
    @agent-native/toolkit UI, so the toolkit's @source registration belongs here
@@ -451,6 +452,10 @@
     border-end-start-radius: var(--agent-native-raised-radius);
     box-shadow: none;
   }
+
+  .agent-layout-main-surface[data-agent-chat-canvas="true"] {
+    border-radius: 0;
+  }
 }
 
 /* Shared agent sidebar entry/exit transitions.
@@ -601,6 +606,7 @@
 
   --color-destructive: hsl(var(--destructive));
   --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-agent-kit-positive: hsl(var(--agent-kit-positive));
 
   --color-muted: hsl(var(--muted));
   --color-muted-foreground: hsl(var(--muted-foreground));
@@ -680,6 +686,134 @@
     100% {
       transform: translateX(100%);
     }
+  }
+}
+
+/* AgentKit component roles. Keep product code on named roles so applications
+   can tune the chat system without reaching into component implementation. */
+.agent-kit-density {
+  font-size: var(--agent-kit-density-font-size);
+  line-height: var(--agent-kit-density-line-height);
+}
+
+.agent-kit-supporting-copy {
+  font-size: var(--agent-kit-supporting-font-size);
+  line-height: var(--agent-kit-supporting-line-height);
+}
+
+.agent-kit-caption-copy {
+  font-size: var(--agent-kit-caption-font-size);
+  line-height: var(--agent-kit-caption-line-height);
+}
+
+.agent-kit-micro-copy {
+  font-size: var(--agent-kit-micro-font-size);
+}
+
+.agent-kit-activity-row {
+  min-height: var(--agent-kit-activity-row-min-height);
+  font-size: var(--agent-kit-density-font-size);
+  line-height: var(--agent-kit-density-line-height);
+}
+
+.agent-kit-activity-icon {
+  width: var(--agent-kit-activity-icon-size);
+  height: var(--agent-kit-activity-icon-size);
+}
+
+.agent-kit-activity-object-boundary {
+  max-width: var(--agent-kit-activity-object-max-width);
+}
+
+.agent-kit-message-bubble-boundary {
+  max-width: var(--agent-kit-message-bubble-max-width);
+}
+
+.agent-kit-tool-content-boundary {
+  max-width: var(--agent-kit-tool-content-max-width);
+}
+
+.agent-kit-tone-positive {
+  color: hsl(var(--agent-kit-positive));
+}
+
+.agent-kit-composer-adjacent-width {
+  width: min(
+    calc(100% - var(--agent-kit-composer-adjacent-inline-inset)),
+    var(--agent-kit-conversation-max-width)
+  );
+}
+
+.agent-kit-page-fade {
+  top: var(--agent-kit-page-header-height);
+  z-index: var(--agent-kit-layer-page-fade);
+}
+
+.agent-kit-page-header {
+  height: var(--agent-kit-page-header-height);
+  z-index: var(--agent-kit-layer-page-header);
+}
+
+.agent-kit-chat-canvas-toolbar {
+  height: var(--agent-kit-page-header-height);
+  z-index: var(--agent-kit-layer-page-header);
+}
+
+[data-agent-chat-workspace-state] .agent-kit-page-header {
+  border-bottom-width: 0;
+}
+
+.agent-kit-chat-canvas-body {
+  width: 100%;
+  overflow: clip;
+}
+
+.agent-kit-workspace-panel {
+  top: var(--agent-kit-page-header-height);
+  bottom: 0;
+  z-index: var(--agent-kit-layer-workspace-panel);
+  width: min(
+    var(--agent-kit-workspace-panel-max-width),
+    calc(100% - var(--agent-kit-workspace-panel-viewport-gutter))
+  );
+}
+
+.agent-kit-workspace-panel[data-state="closed"] {
+  transform: translateX(100%);
+  pointer-events: none;
+}
+
+.agent-kit-workspace-panel[data-state="open"] {
+  transform: translateX(0);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .agent-kit-chat-canvas-body,
+  .agent-kit-workspace-panel {
+    transition-duration: var(--agent-kit-workspace-panel-transition-duration);
+    transition-timing-function: var(--ease-drawer);
+  }
+
+  .agent-kit-chat-canvas-body {
+    transition-property: width;
+  }
+
+  .agent-kit-workspace-panel {
+    transition-property: transform;
+  }
+}
+
+.agent-kit-workspace-panel__header {
+  height: var(--agent-kit-page-header-height);
+}
+
+@media (min-width: 48rem) {
+  .agent-kit-chat-canvas-body--workspace-open {
+    width: calc(100% - var(--agent-kit-workspace-panel-width));
+  }
+
+  .agent-kit-workspace-panel {
+    width: var(--agent-kit-workspace-panel-width);
   }
 }
 
@@ -1032,7 +1166,7 @@
 }
 
 .agent-builder-setup-card--attached:not(.agent-builder-setup-card--sidebar) {
-  max-inline-size: min(100%, 750px);
+  max-inline-size: min(100%, var(--agent-kit-conversation-max-width));
   margin-inline: auto;
   padding-inline: 0 !important;
 }
@@ -1120,13 +1254,17 @@
 
 .agent-composer-area--hero {
   padding-inline: 0;
-  padding-block: 0.5rem;
+  padding-block: var(--agent-kit-composer-block-padding-start)
+    var(--agent-kit-composer-block-padding-end);
 }
 
 [data-agent-fullscreen="true"]
   .agent-composer-stack
   [data-agent-message-queue="true"] {
-  max-width: calc(750px - 1.5rem);
+  max-width: calc(
+    var(--agent-kit-conversation-max-width) -
+      var(--agent-kit-composer-adjacent-inline-inset)
+  );
   margin-inline: auto;
 }
 
@@ -1162,37 +1300,51 @@
 }
 
 .agent-composer-root--hero {
-  min-height: 4.75rem;
-  border-radius: 1.25rem;
-  border-color: hsl(var(--border) / 0.75);
+  min-height: var(--agent-kit-composer-min-height);
+  border-radius: var(--agent-kit-composer-radius);
+  border-color: var(--agent-kit-composer-border-color);
   background: hsl(var(--card));
-  box-shadow: 0 8px 30px hsl(var(--foreground) / 0.06);
+  box-shadow: var(--agent-kit-composer-elevation);
 }
 
 .agent-composer-root--hero:focus-within {
-  border-color: hsl(var(--ring) / 0.9);
-  box-shadow: none;
+  border-color: var(--agent-kit-composer-focus-border-color);
+  box-shadow: var(--agent-kit-composer-elevation);
 }
 
 .agent-composer-root--hero [data-agent-composer-slot="editor-wrap"] {
-  padding-inline: 1rem;
-  padding-top: 0.75rem;
+  padding-block: var(--agent-kit-composer-editor-padding-block-start)
+    var(--agent-kit-composer-editor-padding-block-end);
+  padding-inline: var(--agent-kit-composer-editor-padding-inline);
 }
 
 .agent-composer-root--hero [data-agent-composer-slot="editor-input"] {
-  min-height: 2.5rem;
-  font-size: 1rem;
-  line-height: 1.5rem;
+  min-height: var(--agent-kit-composer-editor-min-height);
+  max-height: var(--agent-kit-composer-editor-max-height);
+  padding-block: var(--agent-kit-composer-editor-padding-block-end);
+  scroll-padding-block: var(--agent-kit-composer-block-padding-start);
+  font-size: var(--agent-kit-composer-font-size);
+  line-height: var(--agent-kit-composer-line-height);
+}
+
+/* Keep touch-width editors at 16px so mobile Safari does not zoom the page
+   when the composer receives focus. */
+@media (max-width: 767px) {
+  .agent-composer-root--hero [data-agent-composer-slot="editor-input"] {
+    font-size: var(--agent-kit-composer-mobile-font-size);
+    line-height: var(--agent-kit-composer-mobile-line-height);
+  }
 }
 
 .agent-composer-root--hero .agent-composer-toolbar {
-  padding-inline: 1rem;
-  padding-bottom: 0.625rem;
+  padding-inline: var(--agent-kit-composer-toolbar-padding-inline);
+  padding-block: var(--agent-kit-composer-toolbar-padding-block-start)
+    var(--agent-kit-composer-toolbar-padding-block-end);
 }
 
 .agent-composer-root--hero .agent-composer-send-button {
-  height: 2rem;
-  width: 2rem;
+  height: var(--agent-kit-composer-control-size);
+  width: var(--agent-kit-composer-control-size);
   border-radius: 999px;
 }
 

@@ -72,6 +72,12 @@ export {
   type AgentInputCardProps,
 } from "./agent-approval-card.js";
 export {
+  AgentActivityObject,
+  type AgentActivityObjectKind,
+  type AgentActivityObjectProps,
+  type AgentActivityObjectReference,
+} from "./agent-activity-object.js";
+export {
   AgentActivityChip,
   AgentActivityTrace,
   type AgentActivityChipProps,

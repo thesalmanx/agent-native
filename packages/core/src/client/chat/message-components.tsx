@@ -83,8 +83,10 @@ import { McpConnectionSuggestion } from "../resources/McpConnectionSuggestion.js
 import type { ContentPart } from "../sse-event-processor.js";
 import { useThinkingDisplay } from "../thinking-display.js";
 import {
+  humanizeToolName,
   isCallAgentToolCallShadowed,
   isToolCallActive,
+  resolveToolCallRowContext,
   shadowedCallAgentToolCallIds,
 } from "../tool-display.js";
 import { cn } from "../utils.js";
@@ -1723,7 +1725,8 @@ function assistantActivityItem(
         : "steps";
   return {
     id: part.toolCallId ?? `tool-${index}`,
-    label: toolName.replace(/[-_]+/g, " "),
+    label: humanizeToolName(toolName),
+    detail: resolveToolCallRowContext(part.args)?.text,
     variant,
     status: isLast ? "running" : "complete",
   };
@@ -1871,7 +1874,6 @@ function MissingFinalResponseNotice({
 
 export function AssistantMessage() {
   const t = useT();
-  const formatDuration = useLocalizedWorkedDuration();
   const locale = useOptionalLocale()?.locale ?? DEFAULT_LOCALE;
   const [restoreState, setRestoreState] = useState<
     "idle" | "confirming" | "restoring" | "error"
@@ -2132,14 +2134,6 @@ export function AssistantMessage() {
         (p.type !== "tool-call" || p.activity !== true) &&
         isCollapsibleAssistantWorkPart(p, thinkingDisplay),
     );
-  const firstWorkPartIndex = Array.isArray(msgContent)
-    ? msgContent.findIndex(
-        (p, index) =>
-          !isCallAgentToolCallShadowed(msgContent, index) &&
-          (p.type !== "tool-call" || p.activity !== true) &&
-          isCollapsibleAssistantWorkPart(p, thinkingDisplay),
-      )
-    : -1;
   const shadowedToolCallIds = Array.isArray(msgContent)
     ? shadowedCallAgentToolCallIds(msgContent)
     : new Set<string>();
@@ -2155,7 +2149,7 @@ export function AssistantMessage() {
       className="group relative"
       style={{ contentVisibility: isComplete ? "auto" : "visible" }}
     >
-      <div className="w-full max-w-[95%] text-sm leading-relaxed text-foreground">
+      <div className="agent-kit-tool-content-boundary w-full text-sm leading-relaxed text-foreground">
         {isComplete && (
           <McpConnectionSuggestion
             text={responseConnectionText}
@@ -2177,17 +2171,6 @@ export function AssistantMessage() {
                     chatRunning,
                   });
                   if (!showSummary) return <>{children}</>;
-                  const durationMs = getAssistantWorkSummaryDurationMs(
-                    capturedDurationMs ?? persistedDurationMs,
-                    part.indices[0] ?? -1,
-                    firstWorkPartIndex,
-                  );
-                  const summary =
-                    durationMs != null && durationMs >= 1000
-                      ? t("agentChat.tool.workedFor", {
-                          duration: formatDuration(durationMs),
-                        })
-                      : t("agentChat.tool.worked");
                   return (
                     <AgentActivityTrace
                       items={part.indices
@@ -2206,7 +2189,6 @@ export function AssistantMessage() {
                         .filter(
                           (item): item is AgentActivityItem => item !== null,
                         )}
-                      summary={summary}
                       activeSummary={t("agentChat.status.working")}
                       running={chatRunning}
                       variant={hasCodeAgentTools ? "coding" : "steps"}

@@ -1,12 +1,15 @@
 import {
   IconBrain,
-  IconCode,
-  IconFile,
-  IconPlayerPlay,
-  IconSearch,
+  IconFileDiff,
+  IconFileText,
+  IconTerminal2,
 } from "@tabler/icons-react";
 
 import { cn } from "../utils.js";
+import {
+  AgentActivityObject,
+  type AgentActivityObjectReference,
+} from "./agent-activity-object.js";
 
 export type ToolChipKind = "think" | "write" | "run" | "read";
 export type ToolChipTone = "default" | "add" | "remove";
@@ -21,6 +24,7 @@ export interface ToolChipStep {
   kind: ToolChipKind;
   label: string;
   chip: string;
+  object?: AgentActivityObjectReference;
   details?: ToolChipDetail[];
   mono?: boolean;
 }
@@ -30,6 +34,7 @@ export interface ToolChipDiff {
   file: string;
   additions: number;
   deletions?: number;
+  object?: AgentActivityObjectReference;
 }
 
 export interface ToolChipsProps {
@@ -40,18 +45,18 @@ export interface ToolChipsProps {
 
 const KIND_ICONS = {
   think: IconBrain,
-  write: IconCode,
-  run: IconPlayerPlay,
-  read: IconSearch,
+  write: IconFileDiff,
+  run: IconTerminal2,
+  read: IconFileText,
 } as const;
 
 function DetailLine({ line }: { line: ToolChipDetail }) {
   return (
     <span
       className={cn(
-        "truncate font-mono text-[11px] leading-relaxed",
-        line.tone === "add" && "text-green",
-        line.tone === "remove" && "text-red",
+        "agent-kit-density truncate font-mono",
+        line.tone === "add" && "agent-kit-tone-positive",
+        line.tone === "remove" && "text-destructive",
         line.tone === "default" && "text-muted-foreground",
       )}
     >
@@ -66,24 +71,31 @@ function ToolStepRow({ step }: { step: ToolChipStep }) {
 
   return (
     <div>
-      <div className="flex min-h-7 w-full min-w-0 items-center gap-2 rounded-md px-1.5 text-left text-xs">
+      <div className="agent-kit-activity-row flex w-full min-w-0 items-center gap-2 text-left">
         <span className="flex size-4 shrink-0 items-center justify-center text-muted-foreground">
           <Icon className="size-3.5" />
         </span>
-        <span className="shrink-0 font-medium text-foreground/85">
+        <span className="min-w-0 flex-1 truncate font-medium text-foreground/85">
           {step.label}
         </span>
-        <span
-          className={cn(
-            "min-w-0 flex-1 truncate rounded-md bg-muted/55 px-1.5 py-0.5 text-[11px] text-muted-foreground",
-            step.mono && "font-mono",
-          )}
-        >
-          {step.chip}
-        </span>
+        {step.object ? (
+          <AgentActivityObject
+            object={step.object}
+            className="agent-kit-activity-object-boundary ms-auto shrink"
+          />
+        ) : (
+          <span
+            className={cn(
+              "agent-kit-activity-object-boundary ms-auto shrink truncate text-right text-muted-foreground",
+              step.mono && "font-mono",
+            )}
+          >
+            {step.chip}
+          </span>
+        )}
       </div>
       {hasDetails && step.details ? (
-        <div className="ms-6 flex flex-col gap-0.5 py-0.5 ps-2">
+        <div className="flex flex-col gap-0.5 py-0.5">
           {step.details.map((line, index) => (
             <DetailLine key={`${step.id}-detail-${index}`} line={line} />
           ))}
@@ -95,13 +107,24 @@ function ToolStepRow({ step }: { step: ToolChipStep }) {
 
 function DiffChip({ diff }: { diff: ToolChipDiff }) {
   return (
-    <div className="inline-flex min-h-7 max-w-full items-center gap-2 rounded-md border border-border bg-background px-2 font-mono text-[11px] text-muted-foreground shadow-sm">
-      <IconFile className="size-3 shrink-0" />
-      <span className="min-w-0 truncate">{diff.file}</span>
-      <span className="shrink-0 text-green">+{diff.additions}</span>
-      {diff.deletions ? (
-        <span className="shrink-0 text-red">−{diff.deletions}</span>
-      ) : null}
+    <div
+      data-agent-tool-diff-row=""
+      className="agent-kit-activity-row flex w-full min-w-0 items-center gap-2 text-muted-foreground"
+    >
+      <IconFileDiff className="size-3.5 shrink-0" />
+      <AgentActivityObject
+        object={
+          diff.object ?? {
+            kind: "file",
+            label: diff.file,
+          }
+        }
+        className="min-w-0 flex-1 text-left"
+      />
+      <span className="ms-auto flex shrink-0 items-center gap-1.5 tabular-nums">
+        <span className="agent-kit-tone-positive">+{diff.additions}</span>
+        <span className="text-destructive">−{diff.deletions ?? 0}</span>
+      </span>
     </div>
   );
 }
@@ -118,7 +141,7 @@ export function ToolChips({
           <ToolStepRow key={step.id} step={step} />
         ))}
         {diffs.length ? (
-          <div className="flex flex-wrap gap-1 pt-1">
+          <div className="flex flex-col gap-0.5 pt-1">
             {diffs.map((diff) => (
               <DiffChip key={diff.id} diff={diff} />
             ))}

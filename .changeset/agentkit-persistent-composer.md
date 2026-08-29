@@ -1,0 +1,5 @@
+---
+"@agent-native/core": patch
+---
+
+Keep the shared AgentKit composer mounted around rich conversation content, add a composable active-thread header with an overflow menu, icon-only sharing, and app-owned workspace controls for full-page chat, remove New chat from the default canvas toolbar, replace mutually exclusive activity icons with flat multi-expand progress disclosures and informative one-line tool context, add linkable smart-object references for files, lines, data, and URLs, present file changes as unfenced path rows with aligned line counts, align agent-authored next actions with the fixed conversation column, leave suggestions absent until the agent supplies them, show connection requests only when the agent is genuinely blocked on provider access, smoothly reveal completed first and follow-up responses from the active AgentKit turn, keep generated body typography quiet unless the user requests styled Markdown, flatten the dedicated Chat canvas, and align activity rows plus focused multiline composer geometry and typography with the conversation density.
