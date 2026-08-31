@@ -3233,6 +3233,9 @@ importers:
       '@agent-native/agentkit':
         specifier: workspace:*
         version: link:../../packages/agentkit
+      '@agent-native/agentkit-react':
+        specifier: workspace:*
+        version: link:../../packages/agentkit-react
       '@agent-native/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -4644,10 +4647,10 @@ importers:
         version: 4.4.3
     devDependencies:
       '@assistant-ui/store':
-        specifier: 'catalog:'
+        specifier: '>=0.2.9 <0.2.14'
         version: 0.2.13(@assistant-ui/tap@0.5.16(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(react@19.2.7)
       '@assistant-ui/tap':
-        specifier: 'catalog:'
+        specifier: ^0.5.14
         version: 0.5.16(@types/react@19.2.17)(react@19.2.7)
       '@radix-ui/react-accordion':
         specifier: ^1.2.12
