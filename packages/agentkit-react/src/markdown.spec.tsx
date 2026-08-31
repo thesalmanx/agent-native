@@ -107,6 +107,32 @@ describe("AgentKit Markdown text parts", () => {
     );
   });
 
+  it("preserves completed Markdown block DOM while the live tail grows", async () => {
+    const resetKey = "stable-markdown-blocks";
+    await renderPart(
+      {
+        type: "text",
+        text: "Stable first paragraph.\n\nA growing second paragraph",
+        format: "markdown",
+      },
+      { active: false, resetKey },
+    );
+    const stableParagraph = container.querySelector("p");
+
+    await renderPart(
+      {
+        type: "text",
+        text: "Stable first paragraph.\n\nA growing second paragraph with more streamed text.",
+        format: "markdown",
+      },
+      { active: false, resetKey },
+    );
+    await act(async () => vi.runAllTimers());
+
+    expect(container.querySelector("p")).toBe(stableParagraph);
+    expect(container.textContent).toContain("with more streamed text");
+  });
+
   it("keeps plain text literal instead of interpreting Markdown", async () => {
     const text = "**Strong** _emphasis_ [docs](https://example.com)";
     await renderPart(

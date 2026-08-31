@@ -258,17 +258,104 @@ export interface AgentInteraction {
   metadata?: AgentProtocolMetadata;
 }
 
+export type AgentActivityKind =
+  | "status"
+  | "reasoning"
+  | "model"
+  | "search"
+  | "read"
+  | "write"
+  | "edit"
+  | "command"
+  | "check"
+  | "mcp"
+  | "connection"
+  | "navigation"
+  | "delegation"
+  | "approval"
+  | "tool"
+  | (string & {});
+
+/**
+ * Infers a conservative presentation kind from a stable tool identifier.
+ * Adapters should prefer an explicitly authored activity kind when available.
+ */
+export function inferAgentActivityKind(toolName: string): AgentActivityKind {
+  const normalized = toolName
+    .trim()
+    .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  const tokens = new Set(normalized.split("-").filter(Boolean));
+  const hasAny = (...values: string[]) =>
+    values.some((value) => tokens.has(value));
+
+  if (
+    hasAny("mcp") ||
+    (tokens.has("provider") && tokens.has("api") && hasAny("request", "call"))
+  ) {
+    return "mcp";
+  }
+  if (
+    hasAny(
+      "connect",
+      "connection",
+      "authenticate",
+      "authentication",
+      "authorize",
+      "authorization",
+      "reauthorize",
+      "oauth",
+    )
+  ) {
+    return "connection";
+  }
+  if (hasAny("approve", "approval", "consent", "permission")) {
+    return "approval";
+  }
+  if (
+    hasAny("delegate", "delegation", "handoff", "subagent") ||
+    (tokens.has("agent") && hasAny("message", "resume", "close"))
+  ) {
+    return "delegation";
+  }
+  if (hasAny("navigate", "navigation", "route", "open")) {
+    return "navigation";
+  }
+  if (hasAny("search", "searches", "lookup", "find", "query")) {
+    return "search";
+  }
+  if (hasAny("read", "reads", "get", "list", "fetch", "inspect", "view")) {
+    return "read";
+  }
+  if (hasAny("edit", "patch", "replace")) return "edit";
+  if (
+    hasAny(
+      "write",
+      "create",
+      "update",
+      "delete",
+      "save",
+      "send",
+      "publish",
+      "upload",
+    )
+  ) {
+    return "write";
+  }
+  if (hasAny("check", "checks", "verify", "test", "tests", "validate")) {
+    return "check";
+  }
+  if (hasAny("command", "exec", "execute", "shell", "terminal", "bash")) {
+    return "command";
+  }
+  return "tool";
+}
+
 export interface AgentActivity {
   id: string;
-  kind:
-    | "reasoning"
-    | "search"
-    | "read"
-    | "write"
-    | "command"
-    | "tool"
-    | "check"
-    | (string & {});
+  kind: AgentActivityKind;
   label: string;
   detail?: string;
   status: "running" | "completed" | "failed" | "cancelled";

@@ -1,9 +1,9 @@
 # AgentKit architecture
 
-Agent-Native is the application and execution platform. AgentKit is its
-official Agent Experience Framework. Toolkit is the semantic design-system and
-workspace layer. These layers are designed to work together without collapsing
-their ownership boundaries.
+Agent-Native is the application framework and execution platform. AgentKit is
+its agent interaction and experience layer. Toolkit is the semantic
+design-system and workspace layer. These layers are designed to work together
+without collapsing their ownership boundaries.
 
 | Layer        | Owns                                                                                       | Does not own                                    |
 | ------------ | ------------------------------------------------------------------------------------------ | ----------------------------------------------- |
@@ -71,39 +71,39 @@ behavioral owners and violates the contract.
 12. Approval authorization is explicit. Option ids and user-facing labels never
     determine whether a response approves or denies work.
     A host may expose either capability without pretending one is the other.
-12. The agent roster is a current-state projection. Agent interactions are an
+13. The agent roster is a current-state projection. Agent interactions are an
     append-only audit of collaboration. Lifecycle state never replaces the
     activity that explains what an agent actually did.
-13. Work outside the thread declares `scope` and a portable `source` smart
+14. Work outside the thread declares `scope` and a portable `source` smart
     object. The protocol never assumes that an app, workspace object, or remote
     agent shares the chat host's navigation or authorization model.
-14. One controller owns a conversation's state and command lifecycle. A host
+15. One controller owns a conversation's state and command lifecycle. A host
     may project an existing runtime through that contract, but it must not open
     a parallel stream or maintain duplicate message, queue, or approval state.
-15. `resubscribeRun` reconnects to existing work. Retrying work is a separate,
+16. `resubscribeRun` reconnects to existing work. Retrying work is a separate,
     host-defined, idempotency-aware action and is never inferred from a network
     failure.
-16. Host and agent-authored renderers fail within their own surface boundary.
+17. Host and agent-authored renderers fail within their own surface boundary.
     Users receive safe copy. Host observability receives the original failure
     with thread and surface identity.
-17. Aborting non-stream request context cancels only that operation. Aborting a
+18. Aborting non-stream request context cancels only that operation. Aborting a
     run subscription releases only that subscriber's resources. Neither action
     implicitly cancels or otherwise mutates the remote run.
-18. A durable snapshot is self-contained. Empty projections are present as
+19. A durable snapshot is self-contained. Empty projections are present as
     empty arrays, its checkpoint covers every included run, and active-run ids
     resolve only to included non-terminal runs.
-19. Capability omission means unknown. Unsupported and temporarily unavailable
+20. Capability omission means unknown. Unsupported and temporarily unavailable
     states are explicit, typed, and never coerced into a successful no-op.
-20. Actor, workspace, access, audit, trace, and context metadata are portable
+21. Actor, workspace, access, audit, trace, and context metadata are portable
     references, not authorization grants. The receiving host re-resolves them
     at its trust boundary.
-21. Events are contiguous within a run. A consumer rejects a sequence gap
+22. Events are contiguous within a run. A consumer rejects a sequence gap
     before advancing its replay cursor so reconnect cannot make a missing event
     permanent.
-22. Approval continuation binds an explicit approve-or-deny decision to the
+23. Approval continuation binds an explicit approve-or-deny decision to the
     exact pending request id. Option labels and localized identifiers never
     imply authorization.
-23. AgentKit packages publish as one compatibility-tested release train even
+24. AgentKit packages publish as one compatibility-tested release train even
     though focused packages remain independently installable.
 
 ## Protocol boundaries

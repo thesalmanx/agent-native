@@ -3,6 +3,12 @@ import { describe, expect, it, vi } from "vitest";
 
 import { createAgentNativeAgentKitTransport } from "./agentkit-agent-native.js";
 
+const runStateMocks = vi.hoisted(() => ({
+  dispatchAgentChatRunning: vi.fn(),
+}));
+
+vi.mock("../use-agent-chat-running-threads.js", () => runStateMocks);
+
 function json(value: unknown, status = 200): Response {
   return new Response(JSON.stringify(value), {
     status,
@@ -130,6 +136,22 @@ describe("createAgentNativeAgentKitTransport", () => {
       "run.status",
       "run.completed",
     ]);
+    expect(runStateMocks.dispatchAgentChatRunning).toHaveBeenCalledWith({
+      isRunning: true,
+      phase: "responding",
+      threadId: "thread-1",
+      tabId: "thread-1",
+      runId: "run-2",
+      reason: "response_started",
+    });
+    expect(runStateMocks.dispatchAgentChatRunning).toHaveBeenCalledWith({
+      isRunning: false,
+      phase: "idle",
+      threadId: "thread-1",
+      tabId: "thread-1",
+      runId: "run-2",
+      reason: "run.completed",
+    });
     expect(
       events.find((event) => event.type === "suggestions.updated"),
     ).toMatchObject({

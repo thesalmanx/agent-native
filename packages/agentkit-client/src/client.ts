@@ -53,6 +53,12 @@ export interface AgentKitClientOptions {
    * client created the transport exclusively for its own lifecycle.
    */
   transportOwnership?: "borrowed" | "owned";
+  /**
+   * Keep accepted run subscriptions alive when their last visible thread lease
+   * releases. Chat shells use this so navigation changes presentation without
+   * cancelling agent work; disposal still stops every retained consumer.
+   */
+  retainActiveRunsOnThreadRelease?: boolean;
   createId?: (prefix: string) => string;
   now?: () => string;
   reconnect?: {
@@ -391,6 +397,7 @@ export class AgentKitClient implements AgentKitController {
   private readonly onError?: (error: AgentError) => void;
   private readonly upload: AgentKitUploadDriver;
   private readonly ownsTransport: boolean;
+  private readonly retainActiveRunsOnThreadRelease: boolean;
   private readonly listeners = new Set<AgentKitListener>();
   private readonly consumers = new Map<string, Promise<void>>();
   private readonly consumerAbortControllers = new Map<
@@ -409,6 +416,8 @@ export class AgentKitClient implements AgentKitController {
   public constructor(options: AgentKitClientOptions) {
     this.transport = options.transport;
     this.ownsTransport = options.transportOwnership === "owned";
+    this.retainActiveRunsOnThreadRelease =
+      options.retainActiveRunsOnThreadRelease ?? false;
     this.createId = options.createId ?? defaultCreateId;
     this.now = options.now ?? (() => new Date().toISOString());
     this.reconnectAttempts = options.reconnect?.attempts ?? 3;
@@ -2053,7 +2062,9 @@ export class AgentKitClient implements AgentKitController {
     const count = this.threadLeaseCounts.get(threadId) ?? 0;
     if (count <= 1) {
       this.threadLeaseCounts.delete(threadId);
-      this.stopThreadConsumers(threadId, "released");
+      if (!this.retainActiveRunsOnThreadRelease) {
+        this.stopThreadConsumers(threadId, "released");
+      }
       return;
     }
     this.threadLeaseCounts.set(threadId, count - 1);

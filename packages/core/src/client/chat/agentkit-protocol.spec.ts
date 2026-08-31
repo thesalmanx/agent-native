@@ -296,7 +296,7 @@ describe("createAgentKitProtocolAdapter", () => {
     });
     expect(result[5]).toMatchObject({
       type: "activity.started",
-      activity: { kind: "tool", label: "Run checks" },
+      activity: { kind: "check", label: "Run checks" },
     });
 
     const replay = await drain(

@@ -128,12 +128,23 @@
   text-overflow: clip;
 }
 
+.chat-sidebar-thread-title-shell {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
 .chat-sidebar-thread-title {
   display: block;
-  width: 100%;
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
+}
+
+.chat-sidebar-thread-running {
+  color: hsl(var(--sidebar-foreground) / 0.72);
 }
 
 .chat-sidebar-thread-title[data-overflow="true"] {

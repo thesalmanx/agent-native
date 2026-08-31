@@ -85,12 +85,32 @@ describe("advanceBufferedText", () => {
     await renderBufferedText({ active: false, resetKey, text: complete });
     expect(container.textContent).toBe(initial);
 
-    await act(async () => vi.advanceTimersByTime(20));
+    await act(async () => vi.advanceTimersByTime(40));
     expect(container.textContent?.length).toBeGreaterThan(initial.length);
     expect(container.textContent?.length).toBeLessThan(complete.length);
 
     await act(async () => vi.runAllTimers());
     expect(container.textContent).toBe(complete);
+  });
+
+  it("keeps a large transport burst paced by animation frames", async () => {
+    const text = "Architecture and lifecycle details. ".repeat(500);
+
+    await renderBufferedText({
+      active: true,
+      resetKey: "large-transport-burst",
+      text,
+    });
+    expect(container.textContent).toBe("");
+
+    await act(async () => vi.advanceTimersByTime(40));
+    const firstFrameLength = container.textContent?.length ?? 0;
+    expect(firstFrameLength).toBeGreaterThan(0);
+    expect(firstFrameLength).toBeLessThan(text.length / 10);
+
+    await act(async () => vi.advanceTimersByTime(40));
+    expect(container.textContent?.length).toBeGreaterThan(firstFrameLength);
+    expect(container.textContent?.length).toBeLessThan(text.length);
   });
 
   it("renders hydrated completed messages immediately despite a partial cache", async () => {

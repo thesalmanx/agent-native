@@ -497,6 +497,10 @@ body:has(> [data-agent-native-composer-popover="true"]) > .fixed.inset-0 {
   .agentkit-transcript {
   grid-row: 2;
   overflow: visible;
+}
+
+.agentkit-chat[data-empty="true"][data-empty-composer-placement="center"]
+  .agentkit-transcript-content {
   padding-block: 0;
 }
 
@@ -541,13 +545,11 @@ body:has(> [data-agent-native-composer-popover="true"]) > .fixed.inset-0 {
 .agentkit-transcript {
   grid-column: 1;
   grid-row: 2;
-  inline-size: min(100%, 47rem);
+  inline-size: 100%;
   min-block-size: 0;
-  margin-inline: auto;
   overflow-y: auto;
   overflow-anchor: none;
   overscroll-behavior-block: contain;
-  padding: 1.5rem 1rem;
   scrollbar-color: transparent transparent;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
@@ -585,7 +587,10 @@ body:has(> [data-agent-native-composer-popover="true"]) > .fixed.inset-0 {
 }
 
 .agentkit-transcript-content {
+  inline-size: min(100%, 47rem);
   min-inline-size: 0;
+  margin-inline: auto;
+  padding: 1.5rem 1rem;
 }
 
 .agentkit-message {
@@ -805,6 +810,7 @@ body:has(> [data-agent-native-composer-popover="true"]) > .fixed.inset-0 {
 }
 
 .agentkit-activities-summary::-webkit-details-marker,
+.agentkit-activity-cluster > summary::-webkit-details-marker,
 .agentkit-tasks-summary::-webkit-details-marker {
   display: none;
 }
@@ -875,10 +881,28 @@ body:has(> [data-agent-native-composer-popover="true"]) > .fixed.inset-0 {
 }
 
 .agentkit-activities-count,
+.agentkit-activity-cluster-count,
 .agentkit-tasks-count,
 .agentkit-task-progress {
   color: color-mix(in srgb, var(--agentkit-text-muted) 75%, transparent);
   font-variant-numeric: tabular-nums;
+}
+
+.agentkit-activity-cluster-count {
+  flex: none;
+  margin-inline-start: auto;
+}
+
+.agentkit-activity-cluster > summary {
+  cursor: pointer;
+}
+
+.agentkit-activity-cluster-items {
+  display: grid;
+  gap: 0.125rem;
+  margin-inline-start: 0.5rem;
+  padding-inline-start: 1rem;
+  border-inline-start: 1px solid var(--agentkit-border);
 }
 
 .agentkit-activities-label {
@@ -1401,7 +1425,7 @@ button.agentkit-object {
 }
 
 @media (max-width: 40rem) {
-  .agentkit-transcript {
+  .agentkit-transcript-content {
     padding-inline: 0.75rem;
   }
 

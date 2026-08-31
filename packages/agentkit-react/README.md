@@ -1,9 +1,9 @@
 # AgentKit React
 
-Composable React bindings for AgentKit, the official Agent Experience
-Framework for the Agent-Native application and execution platform. Toolkit
-supplies the semantic composer and workspace design layer. AgentKit React owns
-conversation presentation and binds it to one AgentKit controller.
+Composable React bindings for AgentKit, the agent interaction and experience
+layer for the Agent-Native framework. Toolkit supplies the semantic composer
+and workspace design layer. AgentKit React owns conversation presentation and
+binds it to one AgentKit controller.
 
 The reference experience includes a
 persistent composer, recessed message queue, agent-authored suggestions,
@@ -43,12 +43,35 @@ through command headers, protocol envelopes, and event streams.
   transport was created exclusively for this surface.
 - `client`: the host owns the `AgentKitClient`, including final disposal.
 
-Managed clients are disposed when their endpoint, transport, thread, or mounted
-surface changes. Caller-owned clients are never disposed. The active thread is
-opened through a client lease, active runs are resubscribed, and the old lease
-is released on a client or thread change. Obsolete loads cannot report errors
-after that release. Set `load="manual"` only when an advanced host coordinates
+Managed clients are disposed when their endpoint, transport, or mounted surface
+changes. Caller-owned clients are never disposed. Changing `threadId` keeps the
+managed client but exchanges its active thread lease, so one shell can preserve
+cross-thread execution state without rebuilding its controller. Active runs are
+resubscribed when a thread opens, and obsolete loads cannot report errors after
+their lease releases. Set `load="manual"` only when an advanced host coordinates
 loading and leases itself.
+
+Chat shells that let users navigate away from active work can keep accepted run
+subscriptions alive after the last visible lease releases:
+
+```tsx
+<AgentChat
+  transport={transport}
+  clientOptions={{
+    transportOwnership: "owned",
+    retainActiveRunsOnThreadRelease: true,
+  }}
+  threadId={threadId}
+/>
+```
+
+The retained consumer ends on the run's terminal event or when the managed
+client is disposed. Hosts can pair this with
+`useAgentChatRunningThreads()` from `@agent-native/core/client/agent-chat` to
+render per-thread progress in rails or tabs while the conversation is hidden.
+`workingThreadIds` ends at the first visible assistant response, while
+`runningThreadIds` remains active until the transport reaches a terminal event;
+this keeps presentation honest without weakening queue and cancellation safety.
 
 All three modes are safe to server-render: network work starts in effects, not
 during render. React Strict Mode replays share the same managed lease, so the
@@ -65,24 +88,29 @@ import { useMemo } from "react";
 
 function Conversation({ threadId }: { threadId: string }) {
   const transport = useMemo(
-    () => createAgentNativeAgentKitTransport({ threadId, surface: "app" }),
-    [threadId],
+    () => createAgentNativeAgentKitTransport({ surface: "app" }),
+    [],
   );
   return (
     <AgentChat
       transport={transport}
-      clientOptions={{ transportOwnership: "owned" }}
+      clientOptions={{
+        transportOwnership: "owned",
+        retainActiveRunsOnThreadRelease: true,
+      }}
       threadId={threadId}
     />
   );
 }
 ```
 
-This Agent-Native example transfers its thread-scoped transport to the managed
-client, which disposes it exactly once when replaced or unmounted. Omit the
-ownership option for shared transports. Use `client` when the host owns an
-`AgentKitClient`. Use `controller` only on `AgentKitRoot` or `AgentKitProvider`
-for an advanced controller implementation.
+This Agent-Native example transfers its shell-scoped transport to the managed
+client, which disposes it exactly once when replaced or unmounted. The transport
+receives the current thread on every command; keeping it stable is what lets a
+background subscription survive route changes. Omit the ownership option for
+shared transports. Use `client` when the host owns an `AgentKitClient`. Use
+`controller` only on `AgentKitRoot` or `AgentKitProvider` for an advanced
+controller implementation.
 
 ## Contextual connection requests
 
@@ -119,12 +147,21 @@ restricted to enumerated answers. Hosts can localize the default affordance
 through `approvalOther` and `approvalOtherPlaceholder` labels, or replace the
 entire approval surface with `slots.approval`.
 
-Completed activity groups collapse to a quiet `Worked for {{duration}}` row
-using the run's canonical start and completion timestamps. Running groups keep
-their live activity labels. Hosts can localize both states with the `worked`
-and `workedFor` labels; `workedFor` receives the formatted value through its
-`{{duration}}` placeholder. Duration units use `durationHourShort`,
-`durationMinuteShort`, and `durationSecondShort`.
+Active execution segments use a quiet `Working for {{duration}}` timer, then
+settle to `Worked for {{duration}}` from the run's canonical timestamps.
+Consecutive equivalent default activities are clustered into one counted row;
+expanding it preserves every underlying trace record. Custom activity and tool
+renderers remain ungrouped. Hosts can localize the timer with `working`,
+`workingFor`, `worked`, and `workedFor`; the duration-bearing labels receive
+the formatted value through `{{duration}}`. Duration units use
+`durationHourShort`, `durationMinuteShort`, and `durationSecondShort`.
+
+Default activity rows use semantic icons for reasoning, search, reading,
+editing, commands, checks, MCP calls, connections, navigation, delegation, and
+approval. Adapters should emit an explicit `activity.kind` whenever they know
+the operation; otherwise AgentKit conservatively infers the kind from the stable
+tool identifier. The run-level `Working for…` spine remains visually distinct
+from every individual action.
 
 ## Composition contract
 

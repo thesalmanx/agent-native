@@ -1,10 +1,10 @@
 # AgentKit Client
 
-The framework-agnostic controller for AgentKit, Agent-Native's official Agent
-Experience Framework. It owns deterministic event reduction, optimistic user
-messages, sequence replay, reconnects, approvals, actions, suggestions, and
-message queues. It does not own agent execution, persistence, authentication,
-authorization, application state, or presentation.
+The framework-agnostic controller for AgentKit, the agent interaction and
+experience layer for Agent-Native. It owns deterministic event reduction,
+optimistic user messages, sequence replay, reconnects, approvals, actions,
+suggestions, and message queues. It does not own agent execution, persistence,
+authentication, authorization, application state, or presentation.
 
 UI bindings consume its immutable snapshot through `subscribe()` and
 `getSnapshot()`.

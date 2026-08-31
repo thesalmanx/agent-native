@@ -1,19 +1,20 @@
-import type {
-  AgentActivity,
-  AgentApprovalRequest,
-  AgentConnectionRequest,
-  AgentError,
-  AgentEvent,
-  AgentInteraction,
-  AgentMessage,
-  AgentMessagePart,
-  AgentObjectReference,
-  AgentParticipant,
-  AgentRunOptions,
-  AgentTask,
-  AgentToolCall,
-  AgentWidget,
-  RunId,
+import {
+  inferAgentActivityKind,
+  type AgentActivity,
+  type AgentApprovalRequest,
+  type AgentConnectionRequest,
+  type AgentError,
+  type AgentEvent,
+  type AgentInteraction,
+  type AgentMessage,
+  type AgentMessagePart,
+  type AgentObjectReference,
+  type AgentParticipant,
+  type AgentRunOptions,
+  type AgentTask,
+  type AgentToolCall,
+  type AgentWidget,
+  type RunId,
 } from "@agent-native/agentkit-protocol";
 import { writeClipboardText } from "@agent-native/toolkit/clipboard";
 import {
@@ -33,6 +34,7 @@ import {
   Surface,
   TextField,
 } from "@agent-native/toolkit/design-system";
+import { splitMarkdownBlocks } from "@agent-native/toolkit/markdown-block-split";
 import {
   IconActivity,
   IconAlertCircle,
@@ -59,6 +61,7 @@ import {
 } from "@tabler/icons-react";
 import {
   Component,
+  memo,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -213,25 +216,46 @@ export function safeAgentHref(href?: string): string | undefined {
   }
 }
 
+const AgentMarkdownBlock = memo(function AgentMarkdownBlock({
+  text,
+}: {
+  text: string;
+}) {
+  return (
+    <ReactMarkdown
+      skipHtml
+      remarkPlugins={[remarkGfm]}
+      components={{
+        a: ({ children, href }) => {
+          const safeHref = safeAgentHref(href);
+          return safeHref ? (
+            <a href={safeHref}>{children}</a>
+          ) : (
+            <span>{children}</span>
+          );
+        },
+      }}
+    >
+      {text}
+    </ReactMarkdown>
+  );
+});
+
 function AgentMarkdown({ text }: { text: string }) {
+  const { completedBlocks, tail } = useMemo(
+    () => splitMarkdownBlocks(text),
+    [text],
+  );
+  const blocks = useMemo(
+    () => (tail ? [...completedBlocks, tail] : completedBlocks),
+    [completedBlocks, tail],
+  );
+
   return (
     <div className="agentkit-markdown" data-format="markdown">
-      <ReactMarkdown
-        skipHtml
-        remarkPlugins={[remarkGfm]}
-        components={{
-          a: ({ children, href }) => {
-            const safeHref = safeAgentHref(href);
-            return safeHref ? (
-              <a href={safeHref}>{children}</a>
-            ) : (
-              <span>{children}</span>
-            );
-          },
-        }}
-      >
-        {text}
-      </ReactMarkdown>
+      {blocks.map((block, index) => (
+        <AgentMarkdownBlock key={index} text={block} />
+      ))}
     </div>
   );
 }
@@ -258,17 +282,31 @@ function createInvocationId(widgetId: string, actionId: string): string {
 function activityIcon(kind: string): ReactNode {
   const props = { "aria-hidden": true, className: "agentkit-icon" } as const;
   switch (kind) {
+    case "status":
+      return <IconActivity {...props} />;
     case "reasoning":
+    case "model":
       return <IconBrain {...props} />;
     case "search":
       return <IconSearch {...props} />;
     case "read":
       return <IconBook2 {...props} />;
     case "write":
+    case "edit":
       return <IconCode {...props} />;
     case "command":
-    case "check":
       return <IconTerminal2 {...props} />;
+    case "check":
+      return <IconCircleCheck {...props} />;
+    case "mcp":
+    case "connection":
+      return <IconPlugConnected {...props} />;
+    case "navigation":
+      return <IconGitBranch {...props} />;
+    case "delegation":
+      return <IconArrowFork {...props} />;
+    case "approval":
+      return <IconChecklist {...props} />;
     default:
       return <IconTool {...props} />;
   }
@@ -465,7 +503,11 @@ export function AgentActivityItem({
     : undefined;
   const ObjectRenderer = slots.object ?? AgentObjectReferenceView;
   return (
-    <div className="agentkit-activity-item" data-status={activity.status}>
+    <div
+      className="agentkit-activity-item"
+      data-activity-kind={activity.kind}
+      data-status={activity.status}
+    >
       <div className="agentkit-activity-row">
         {activityIcon(activity.kind)}
         {agent && AgentRenderer ? (
@@ -513,10 +555,92 @@ export function AgentActivityItem({
   );
 }
 
+function objectReferenceIdentity(
+  object: AgentObjectReference | undefined,
+): string {
+  return object
+    ? [object.kind, object.id, object.uri ?? ""].join("\u0000")
+    : "";
+}
+
+function activityClusterIdentity(activity: AgentActivity): string {
+  return [
+    activity.kind,
+    activity.label.trim(),
+    activity.status,
+    activity.agentId ?? "",
+    objectReferenceIdentity(activity.object),
+    objectReferenceIdentity(activity.source),
+  ].join("\u0001");
+}
+
+function RepeatedActivityCluster({
+  activities,
+  threadId,
+}: {
+  activities: AgentActivity[];
+  threadId: string;
+}) {
+  const { slots, registry } = useAgentKit();
+  const thread = useAgentThread();
+  const [open, setOpen] = useState(false);
+  const activity = activities[0];
+  if (!activity) return null;
+  const agent = activity.agentId ? thread.agents[activity.agentId] : undefined;
+  const AgentRenderer = agent
+    ? (registry.agents?.[agent.kind ?? ""] ??
+      slots.agent ??
+      AgentParticipantView)
+    : undefined;
+  const ObjectRenderer = slots.object ?? AgentObjectReferenceView;
+  return (
+    <details
+      className="agentkit-activity-cluster"
+      data-activity-kind={activity.kind}
+      open={open}
+    >
+      <summary
+        className="agentkit-activity-row"
+        onClick={(event) => {
+          event.preventDefault();
+          setOpen((current) => !current);
+        }}
+      >
+        {activityIcon(activity.kind)}
+        {agent && AgentRenderer ? (
+          <AgentRenderer value={agent} threadId={threadId} />
+        ) : activity.agentId ? (
+          <AgentIdentityChip id={activity.agentId} name={activity.agentId} />
+        ) : null}
+        <span className="agentkit-activity-label">{activity.label}</span>
+        {activity.object ? (
+          <ObjectRenderer value={activity.object} threadId={threadId} />
+        ) : null}
+        {!activity.object && activity.source ? (
+          <ObjectRenderer value={activity.source} threadId={threadId} />
+        ) : null}
+        <span className="agentkit-activity-cluster-count">
+          ×{activities.length}
+        </span>
+        <IconChevronRight
+          aria-hidden="true"
+          className="agentkit-icon agentkit-disclosure-icon"
+          data-open={open ? "true" : "false"}
+        />
+      </summary>
+      <div className="agentkit-activity-cluster-items">
+        {activities.map((item) => (
+          <AgentActivityItem key={item.id} value={item} threadId={threadId} />
+        ))}
+      </div>
+    </details>
+  );
+}
+
 function toolToActivity(tool: AgentToolCall): AgentActivity {
   return {
     id: tool.id,
-    kind: "tool",
+    kind: inferAgentActivityKind(tool.name),
     label: tool.name,
     status:
       tool.status === "completed"
@@ -609,6 +733,28 @@ function firstWorkEvents(events: AgentEvent[]): AgentEvent[] {
   });
 }
 
+function messageEventHasVisibleAssistantOutput(
+  event: AgentEvent,
+  assistantMessageIds: ReadonlySet<string>,
+): boolean {
+  if (event.type === "message.delta") {
+    return (
+      event.text.trim().length > 0 && assistantMessageIds.has(event.messageId)
+    );
+  }
+  if (event.type !== "message.created" && event.type !== "message.completed") {
+    return false;
+  }
+  return (
+    event.message.role === "assistant" &&
+    event.message.parts.some((part) => {
+      if (part.type === "reasoning") return false;
+      if (part.type === "text") return part.text.trim().length > 0;
+      return true;
+    })
+  );
+}
+
 export function AgentActivityGroup({
   runId,
   afterSequence,
@@ -671,48 +817,110 @@ export function AgentActivityGroup({
   });
   const running = items.some((item) => item.status === "running");
   const run = runId ? thread.runs[runId] : undefined;
-  const startedAt = run?.startedAt ? Date.parse(run.startedAt) : Number.NaN;
-  const completedAt = run?.completedAt
-    ? Date.parse(run.completedAt)
-    : Number.NaN;
+  const segmentStartedEvent = firstWorkEvents(runEvents).find((event) =>
+    sequenceInRange(event.sequence, { afterSequence, throughSequence }),
+  );
+  const startedAt =
+    afterSequence === undefined && run?.startedAt
+      ? Date.parse(run.startedAt)
+      : segmentStartedEvent
+        ? Date.parse(segmentStartedEvent.occurredAt)
+        : Number.NaN;
+  const responseStartedEvent =
+    throughSequence === undefined
+      ? undefined
+      : runEvents.find((event) => event.sequence === throughSequence);
+  const completedAt = responseStartedEvent
+    ? Date.parse(responseStartedEvent.occurredAt)
+    : run?.completedAt
+      ? Date.parse(run.completedAt)
+      : Number.NaN;
   const durationMs =
     Number.isFinite(startedAt) && Number.isFinite(completedAt)
       ? Math.max(0, completedAt - startedAt)
       : undefined;
-  const completedRunSummary =
-    afterSequence === undefined &&
-    !running &&
+  const activelyWorking =
+    throughSequence === undefined &&
     run !== undefined &&
-    ["completed", "failed", "cancelled"].includes(run.status);
-  const [open, setOpen] = useState(running);
-  const previousRunningRef = useRef(running);
+    run.status === "running";
+  const visiblyRunning = throughSequence === undefined && running;
+  const [elapsedAt, setElapsedAt] = useState<number>();
   useEffect(() => {
-    if (previousRunningRef.current === running) return;
-    previousRunningRef.current = running;
-    setOpen(running);
-  }, [running]);
+    if (!activelyWorking || !Number.isFinite(startedAt)) return;
+    const update = () => setElapsedAt(Date.now());
+    update();
+    const interval = globalThis.setInterval(update, 1_000);
+    return () => globalThis.clearInterval(interval);
+  }, [activelyWorking, startedAt]);
+  const activeDurationMs =
+    activelyWorking && elapsedAt !== undefined && Number.isFinite(startedAt)
+      ? Math.max(0, elapsedAt - startedAt)
+      : undefined;
+  const completedRunSummary =
+    throughSequence !== undefined ||
+    (afterSequence === undefined &&
+      !running &&
+      run !== undefined &&
+      ["completed", "failed", "cancelled"].includes(run.status));
+  const [open, setOpen] = useState(visiblyRunning);
+  const previousRunningRef = useRef(visiblyRunning);
+  useEffect(() => {
+    if (previousRunningRef.current === visiblyRunning) return;
+    previousRunningRef.current = visiblyRunning;
+    setOpen(visiblyRunning);
+  }, [visiblyRunning]);
   if (items.length === 0) return null;
+  const displayGroups: AgentActivity[][] = [];
+  for (const activity of items) {
+    const sourceTool = toolMap.get(activity.id);
+    const hasCustomToolRenderer = Boolean(
+      sourceTool &&
+      !activityMap.has(activity.id) &&
+      (registry.tools?.[sourceTool.name] ?? slots.tool),
+    );
+    const hasCustomActivityRenderer = Boolean(
+      registry.activities?.[activity.kind] ?? slots.activity,
+    );
+    const previous = displayGroups.at(-1);
+    if (
+      !hasCustomToolRenderer &&
+      !hasCustomActivityRenderer &&
+      previous &&
+      activityClusterIdentity(previous[0] as AgentActivity) ===
+        activityClusterIdentity(activity)
+    ) {
+      previous.push(activity);
+    } else {
+      displayGroups.push([activity]);
+    }
+  }
   const labelsSummary = Array.from(
     new Set(items.map((item) => item.label.trim()).filter(Boolean)),
   );
   const remaining = Math.max(0, labelsSummary.length - 2);
   const summary = `${labelsSummary.slice(0, 2).join(", ")}${remaining ? ` +${remaining}` : ""}`;
-  const summaryLabel = completedRunSummary
-    ? durationMs !== undefined && durationMs >= 1_000
-      ? labels.workedFor.replace(
+  const formatDuration = (ms: number) =>
+    formatAgentKitDuration(ms, {
+      hour: labels.durationHourShort,
+      minute: labels.durationMinuteShort,
+      second: labels.durationSecondShort,
+    });
+  const summaryLabel = activelyWorking
+    ? activeDurationMs !== undefined && activeDurationMs >= 1_000
+      ? labels.workingFor.replace(
           "{{duration}}",
-          formatAgentKitDuration(durationMs, {
-            hour: labels.durationHourShort,
-            minute: labels.durationMinuteShort,
-            second: labels.durationSecondShort,
-          }),
+          formatDuration(activeDurationMs),
         )
-      : labels.worked
-    : summary || labels.activities;
+      : labels.working
+    : completedRunSummary
+      ? durationMs !== undefined && durationMs >= 1_000
+        ? labels.workedFor.replace("{{duration}}", formatDuration(durationMs))
+        : labels.worked
+      : summary || labels.activities;
   return (
     <details
       className="agentkit-activities"
-      data-running={running ? "true" : undefined}
+      data-running={visiblyRunning ? "true" : undefined}
       open={open}
     >
       <summary
@@ -722,7 +930,7 @@ export function AgentActivityGroup({
           setOpen((current) => !current);
         }}
       >
-        <IconTool aria-hidden="true" className="agentkit-icon" />
+        <IconActivity aria-hidden="true" className="agentkit-icon" />
         <span className="agentkit-activities-label">{summaryLabel}</span>
         {!completedRunSummary ? (
           <span className="agentkit-activities-count">{items.length}</span>
@@ -733,7 +941,17 @@ export function AgentActivityGroup({
         />
       </summary>
       <div className="agentkit-activities-list">
-        {items.map((activity) => {
+        {displayGroups.map((activities) => {
+          const activity = activities[0] as AgentActivity;
+          if (activities.length > 1) {
+            return (
+              <RepeatedActivityCluster
+                key={`cluster:${activity.id}`}
+                activities={activities}
+                threadId={threadId}
+              />
+            );
+          }
           const sourceTool = toolMap.get(activity.id);
           const ToolRenderer = sourceTool
             ? (registry.tools?.[sourceTool.name] ?? slots.tool)
@@ -2164,11 +2382,19 @@ export function AgentKitChat({
   }, [thread.events]);
   const messageBoundarySequences = useMemo(() => {
     const result = new Map<string, number>();
+    const assistantMessageIds = new Set(
+      thread.messages
+        .filter((message) => message.role === "assistant")
+        .map((message) => message.id),
+    );
     for (const event of thread.events) {
+      if (!messageEventHasVisibleAssistantOutput(event, assistantMessageIds)) {
+        continue;
+      }
       const messageId =
         event.type === "message.created" || event.type === "message.completed"
           ? event.message.id
-          : event.type === "message.delta" || event.type === "reasoning.delta"
+          : event.type === "message.delta"
             ? event.messageId
             : undefined;
       if (!messageId) continue;
@@ -2178,7 +2404,7 @@ export function AgentKitChat({
       );
     }
     return result;
-  }, [thread.events]);
+  }, [thread.events, thread.messages]);
   const lastAssistantMessagesByRun = useMemo(() => {
     const result = new Map<RunId, { id: string; sequence: number }>();
     for (const message of thread.messages) {

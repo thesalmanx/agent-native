@@ -696,7 +696,7 @@ describe("AgentChat lifecycle", () => {
     }
   });
 
-  it("expands active work and collapses it ahead of the final response", async () => {
+  it("settles work when visible response streaming begins", async () => {
     const threadId = "thread-run-work-order";
     const runId = "run-work-order";
     const userMessage = {
@@ -757,29 +757,67 @@ describe("AgentChat lifecycle", () => {
     const assistantMessage = {
       id: "assistant-1",
       role: "assistant" as const,
-      status: "complete" as const,
-      parts: [{ type: "text" as const, text: "This app coordinates work." }],
+      status: "streaming" as const,
+      parts: [
+        {
+          type: "reasoning" as const,
+          text: "Preparing the response",
+          visibility: "summary" as const,
+        },
+        { type: "text" as const, text: "This app coordinates" },
+      ],
     };
-    const messageEvent = {
-      id: "event-message",
+    const messageCreatedEvent = {
+      id: "event-message-created",
       threadId,
       runId,
       sequence: 2,
       occurredAt: "2026-08-31T00:00:01.000Z",
-      type: "message.completed" as const,
-      message: assistantMessage,
+      type: "message.created" as const,
+      message: {
+        ...assistantMessage,
+        parts: [],
+      },
+    };
+    const reasoningEvent = {
+      id: "event-reasoning",
+      threadId,
+      runId,
+      sequence: 3,
+      occurredAt: "2026-08-31T00:00:02.000Z",
+      type: "reasoning.delta" as const,
+      messageId: assistantMessage.id,
+      text: "Preparing the response",
     };
     const activityCompletedEvent = {
       ...activityEvent,
       id: "event-activity-completed",
-      sequence: 3,
-      occurredAt: "2026-08-31T00:00:02.000Z",
+      sequence: 4,
+      occurredAt: "2026-08-31T00:00:03.000Z",
       type: "activity.completed" as const,
       activity: {
         ...activityEvent.activity,
         status: "completed" as const,
-        completedAt: "2026-08-31T00:00:02.000Z",
+        completedAt: "2026-08-31T00:00:03.000Z",
       },
+    };
+    const textEvent = {
+      id: "event-text",
+      threadId,
+      runId,
+      sequence: 5,
+      occurredAt: "2026-08-31T00:00:04.000Z",
+      type: "message.delta" as const,
+      messageId: assistantMessage.id,
+      text: "This app coordinates",
+    };
+    const runCompletedEvent = {
+      id: "event-run-completed",
+      threadId,
+      runId,
+      sequence: 6,
+      occurredAt: "2026-08-31T00:00:08.000Z",
+      type: "run.completed" as const,
     };
     observable.update({
       connection: "connected",
@@ -789,17 +827,22 @@ describe("AgentChat lifecycle", () => {
         [threadId]: {
           ...runningThread,
           messages: [userMessage, assistantMessage],
-          events: [activityEvent, messageEvent, activityCompletedEvent],
+          events: [
+            activityEvent,
+            messageCreatedEvent,
+            reasoningEvent,
+            activityCompletedEvent,
+            textEvent,
+          ],
           runs: {
             [runId]: {
               id: runId,
-              status: "completed" as const,
-              lastSequence: 3,
+              status: "running" as const,
+              lastSequence: 5,
               startedAt: "2026-08-31T00:00:00.000Z",
-              completedAt: "2026-08-31T00:00:02.000Z",
             },
           },
-          activeRunIds: [],
+          activeRunIds: [runId],
         },
       },
       revision: 1,
@@ -816,7 +859,7 @@ describe("AgentChat lifecycle", () => {
     expect(runWorkAfter?.open).toBe(false);
     expect(
       runWorkAfter?.querySelector(".agentkit-activities-summary")?.textContent,
-    ).toBe("Worked for 2s");
+    ).toBe("Worked for 4s");
     expect(runWorkAfter?.hasAttribute("data-running")).toBe(false);
     expect(runWorkAfter?.querySelector('[data-status="running"]')).toBeNull();
     expect(
@@ -826,6 +869,53 @@ describe("AgentChat lifecycle", () => {
         : 0,
     ).not.toBe(0);
 
+    observable.update({
+      connection: "connected",
+      capabilities: {},
+      capabilitiesStatus: "ready",
+      threads: {
+        [threadId]: {
+          ...runningThread,
+          messages: [
+            userMessage,
+            {
+              ...assistantMessage,
+              status: "complete" as const,
+              parts: [
+                {
+                  type: "text" as const,
+                  text: "This app coordinates work.",
+                },
+              ],
+            },
+          ],
+          events: [
+            activityEvent,
+            messageCreatedEvent,
+            reasoningEvent,
+            activityCompletedEvent,
+            textEvent,
+            runCompletedEvent,
+          ],
+          runs: {
+            [runId]: {
+              id: runId,
+              status: "completed" as const,
+              lastSequence: 6,
+              startedAt: "2026-08-31T00:00:00.000Z",
+              completedAt: "2026-08-31T00:00:08.000Z",
+            },
+          },
+          activeRunIds: [],
+        },
+      },
+      revision: 2,
+    });
+    await flush();
+    expect(
+      runWorkAfter?.querySelector(".agentkit-activities-summary")?.textContent,
+    ).toBe("Worked for 4s");
+
     await act(async () => {
       runWorkAfter
         ?.querySelector("summary")
@@ -833,6 +923,124 @@ describe("AgentChat lifecycle", () => {
       await Promise.resolve();
     });
     expect(runWorkAfter?.open).toBe(true);
+  });
+
+  it("shows an active run timer and clusters repeated default activities", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-31T00:00:15.000Z"));
+    const threadId = "thread-clustered-work";
+    const runId = "run-clustered-work";
+    const activities = Array.from({ length: 3 }, (_, index) => ({
+      id: `activity-docs-${index}`,
+      kind: "tool",
+      label: "Docs search",
+      status: "completed" as const,
+      detail: `Result ${index + 1}`,
+    }));
+    const events: AgentEvent[] = [
+      ...activities.map(
+        (activity, index): AgentEvent => ({
+          id: `event-docs-${index}`,
+          threadId,
+          runId,
+          sequence: index + 1,
+          occurredAt: `2026-08-31T00:00:0${index}.000Z`,
+          type: "activity.completed",
+          activity,
+        }),
+      ),
+      {
+        id: "event-model",
+        threadId,
+        runId,
+        sequence: 4,
+        occurredAt: "2026-08-31T00:00:04.000Z",
+        type: "activity.started",
+        activity: {
+          id: "activity-model",
+          kind: "model",
+          label: "Contacting model",
+          status: "running",
+        },
+      },
+    ];
+    const thread = {
+      ...createAgentThreadState(threadId),
+      events,
+      runs: {
+        [runId]: {
+          id: runId,
+          status: "running" as const,
+          lastSequence: 4,
+          startedAt: "2026-08-31T00:00:00.000Z",
+        },
+      },
+      activeRunIds: [runId],
+    };
+    const observable = observableController({
+      connection: "connected",
+      capabilities: {},
+      capabilitiesStatus: "ready",
+      threads: { [threadId]: thread },
+      revision: 0,
+    });
+    const tree = mount();
+
+    try {
+      await tree.render(
+        <AgentKitProvider
+          controller={observable.controller}
+          threadId={threadId}
+        >
+          <AgentKitChat composer={false} />
+        </AgentKitProvider>,
+      );
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      const work = tree.container.querySelector<HTMLDetailsElement>(
+        ".agentkit-activities",
+      );
+      const cluster = work?.querySelector<HTMLDetailsElement>(
+        ".agentkit-activity-cluster",
+      );
+      expect(
+        work?.querySelector(".agentkit-activities-summary")?.textContent,
+      ).toContain("Working for 15s");
+      expect(cluster?.open).toBe(false);
+      expect(cluster?.querySelector("summary")?.textContent).toContain(
+        "Docs search×3",
+      );
+      expect(
+        cluster?.querySelectorAll(".agentkit-activity-cluster-items > *"),
+      ).toHaveLength(3);
+      await act(async () => {
+        cluster
+          ?.querySelector<HTMLElement>("summary")
+          ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      });
+      expect(cluster?.open).toBe(true);
+      expect(
+        work?.querySelectorAll(
+          ':scope > .agentkit-activities-list > [data-status="completed"]',
+        ),
+      ).toHaveLength(0);
+      expect(
+        work?.querySelectorAll(
+          ':scope > .agentkit-activities-list > [data-status="running"]',
+        ),
+      ).toHaveLength(1);
+
+      await act(async () => {
+        vi.advanceTimersByTime(1_000);
+      });
+      expect(
+        work?.querySelector(".agentkit-activities-summary")?.textContent,
+      ).toContain("Working for 16s");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("keeps each execution segment between the assistant responses it produced", async () => {
@@ -958,6 +1166,12 @@ describe("AgentChat lifecycle", () => {
       '[data-message-id="assistant-second"]',
     );
     expect(work).toHaveLength(2);
+    expect(
+      work[0]?.querySelector(".agentkit-activities-summary")?.textContent,
+    ).toBe("Worked for 1s");
+    expect(
+      work[1]?.querySelector(".agentkit-activities-summary")?.textContent,
+    ).toBe("Worked for 2s");
     expect(work[0]?.textContent).toContain("Read framework files");
     expect(work[0]?.textContent).not.toContain("Edited transcript model");
     expect(work[1]?.textContent).toContain("Edited transcript model");
@@ -1311,7 +1525,7 @@ describe("AgentChat lifecycle", () => {
     expect(streamSignal?.aborted).toBe(true);
   });
 
-  it("deduplicates Strict Mode loads and disposes managed clients on thread release", async () => {
+  it("deduplicates Strict Mode loads and keeps one managed client across thread changes", async () => {
     const signals: AbortSignal[] = [];
     const getThreadSnapshot = vi.fn(
       async ({ threadId }: { threadId: string }) => ({
@@ -1384,13 +1598,13 @@ describe("AgentChat lifecycle", () => {
     expect(getThreadSnapshot).toHaveBeenCalledTimes(2);
     expect(signals).toHaveLength(2);
     expect(signals[0]?.aborted).toBe(true);
-    expect(dispose).toHaveBeenCalledTimes(1);
+    expect(dispose).not.toHaveBeenCalled();
 
     await tree.unmount();
     await flush();
 
     expect(signals[1]?.aborted).toBe(true);
-    expect(dispose).toHaveBeenCalledTimes(2);
+    expect(dispose).toHaveBeenCalledTimes(1);
   });
 
   it("disposes each owned transport exactly once across Strict Mode and thread changes", async () => {

@@ -32,6 +32,7 @@ import {
   AGENTKIT_PROTOCOL_VERSION,
   createCapabilityUnavailableError,
   createCapabilityUnsupportedError,
+  inferAgentActivityKind,
   negotiateAgentKitProtocolVersion,
 } from "@agent-native/agentkit-protocol";
 
@@ -790,7 +791,10 @@ function runtimeActivity(input: {
   metadata?: Record<string, unknown>;
 }): AgentActivity {
   const structured = asRecord(agentNativeMetadata(input.metadata)?.activity);
-  const kind = typeof structured?.kind === "string" ? structured.kind : "tool";
+  const kind =
+    typeof structured?.kind === "string"
+      ? structured.kind
+      : inferAgentActivityKind(input.name);
   const scope =
     structured?.scope === "thread" ||
     structured?.scope === "workspace" ||

@@ -1,5 +1,6 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 
+import { inferAgentActivityKind } from "./index.js";
 import type {
   AgentEvent,
   AgentCustomMessagePart,
@@ -12,6 +13,15 @@ import type {
 } from "./index.js";
 
 describe("AgentKit protocol composition", () => {
+  it("classifies stable tool identifiers into semantic activity kinds", () => {
+    expect(inferAgentActivityKind("docs-search")).toBe("search");
+    expect(inferAgentActivityKind("run_checks")).toBe("check");
+    expect(inferAgentActivityKind("read_file")).toBe("read");
+    expect(inferAgentActivityKind("mcp__slack__search_messages")).toBe("mcp");
+    expect(inferAgentActivityKind("provider-api-request")).toBe("mcp");
+    expect(inferAgentActivityKind("hello")).toBe("tool");
+  });
+
   it("keeps widgets and annotations as first-class message parts", () => {
     const widget: AgentWidget = {
       id: "widget-1",

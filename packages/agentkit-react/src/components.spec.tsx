@@ -151,7 +151,15 @@ describe("AgentKitChat", () => {
     expect(styles).toContain(
       ".agentkit-transcript {\n  grid-column: 1;\n  grid-row: 2;",
     );
-    expect(styles).toContain("padding: 1.5rem 1rem;");
+    expect(styles).toMatch(
+      /\.agentkit-transcript \{[\s\S]*inline-size: 100%;[\s\S]*overflow-y: auto;/,
+    );
+    expect(styles).not.toMatch(
+      /\.agentkit-transcript \{[^}]*inline-size: min\(100%, 47rem\);/,
+    );
+    expect(styles).toMatch(
+      /\.agentkit-transcript-content \{[\s\S]*inline-size: min\(100%, 47rem\);[\s\S]*margin-inline: auto;[\s\S]*padding: 1\.5rem 1rem;/,
+    );
     expect(styles).toContain("overflow-anchor: none;");
     expect(styles).toMatch(
       /\.agentkit-agent \{[\s\S]*padding: 0\.125rem 0\.5rem;[\s\S]*border: 1px solid var\(--agentkit-border\);[\s\S]*border-radius: 999px;[\s\S]*background: var\(--agentkit-subtle\);/,
@@ -410,6 +418,96 @@ describe("AgentKitChat", () => {
     expect(html).toContain("Read framework contracts");
     expect(html).toContain("Agent-Native");
     expect(html.match(/Read framework contracts/g)).toHaveLength(1);
+  });
+
+  it("distinguishes run state, searches, and MCP tools in activity traces", async () => {
+    const transport: AgentTransport = {
+      async startRun() {
+        return { runId: "run-semantic-activity" };
+      },
+      async *subscribeToRun() {
+        const base = {
+          threadId: "thread-1",
+          runId: "run-semantic-activity",
+          occurredAt: "2026-08-31T00:00:00.000Z",
+        };
+        yield {
+          ...base,
+          id: "event-1",
+          sequence: 1,
+          type: "run.started",
+        } as const;
+        yield {
+          ...base,
+          id: "event-2",
+          sequence: 2,
+          type: "tool.started",
+          toolCall: {
+            id: "tool-search",
+            name: "docs-search",
+            status: "running",
+          },
+        } as const;
+        yield {
+          ...base,
+          id: "event-3",
+          sequence: 3,
+          type: "tool.updated",
+          toolCall: {
+            id: "tool-search",
+            name: "docs-search",
+            status: "completed",
+          },
+        } as const;
+        yield {
+          ...base,
+          id: "event-4",
+          sequence: 4,
+          type: "tool.started",
+          toolCall: {
+            id: "tool-mcp",
+            name: "mcp__slack__search_messages",
+            status: "running",
+          },
+        } as const;
+        yield {
+          ...base,
+          id: "event-5",
+          sequence: 5,
+          type: "tool.updated",
+          toolCall: {
+            id: "tool-mcp",
+            name: "mcp__slack__search_messages",
+            status: "completed",
+          },
+        } as const;
+        yield {
+          ...base,
+          id: "event-6",
+          sequence: 6,
+          type: "run.completed",
+        } as const;
+      },
+      async cancelRun() {},
+    };
+    const client = new AgentKitClient({ transport });
+    const run = await client.sendMessage({
+      threadId: "thread-1",
+      text: "Search the docs and Slack",
+    });
+    await run.completed;
+
+    const html = renderToStaticMarkup(
+      <AgentKitProvider controller={client} threadId="thread-1">
+        <AgentKitChat composer={false} />
+      </AgentKitProvider>,
+    );
+
+    expect(html).toContain('data-activity-kind="search"');
+    expect(html).toContain('data-activity-kind="mcp"');
+    expect(html).toContain("tabler-icon-search");
+    expect(html).toContain("tabler-icon-plug-connected");
+    expect(html).toContain("tabler-icon-activity");
   });
 
   it("keeps chat chrome conversation-aware and slots replaceable", async () => {

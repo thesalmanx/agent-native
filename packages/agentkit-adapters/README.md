@@ -1,7 +1,7 @@
 # AgentKit Adapters
 
-Provider-neutral deployment adapters for AgentKit, Agent-Native's official
-Agent Experience Framework. The HTTP adapter uses
+Provider-neutral deployment adapters for AgentKit, the agent interaction and
+experience layer for Agent-Native. The HTTP adapter uses
 versioned JSON envelopes for commands and resumable server-sent events for run
 streams. Its server half is a standard Fetch handler, so the same contract runs
 in Node, serverless, and edge hosts.

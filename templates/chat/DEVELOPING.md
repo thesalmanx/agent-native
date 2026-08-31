@@ -54,9 +54,10 @@ react-router.config.ts # React Router framework config
 
 ## Chat-First Shape
 
-Agent-Native is the application and execution platform. AgentKit is its
-official Agent Experience Framework. Toolkit supplies the semantic composer,
-design-system primitives, and workspace UI used around the conversation.
+Agent-Native is the application framework and execution platform. AgentKit is
+its agent interaction and experience layer. Toolkit supplies the semantic
+composer, design-system primitives, and workspace UI used around the
+conversation.
 
 The `/` route is the app's primary AgentKit surface. Its default integration is:
 

@@ -1,7 +1,7 @@
 {
   "name": "@agent-native/agentkit",
   "version": "0.1.0",
-  "description": "Provider-neutral Agent Experience Framework for composable agent-native conversations.",
+  "description": "Provider-neutral AgentKit runtime for composable agent-native conversations.",
   "homepage": "https://github.com/BuilderIO/agent-native#readme",
   "license": "MIT",
   "repository": {

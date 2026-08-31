@@ -160,6 +160,8 @@ export function AgentKitRoot({
   const transportOwnership = endpoint
     ? "owned"
     : clientOptions?.transportOwnership;
+  const retainActiveRunsOnThreadRelease =
+    clientOptions?.retainActiveRunsOnThreadRelease;
   const managedClient = useMemo(
     () =>
       controller
@@ -174,6 +176,7 @@ export function AgentKitRoot({
               delayMs: reconnectDelay,
             },
             onError,
+            retainActiveRunsOnThreadRelease,
             upload,
           }),
     [
@@ -184,7 +187,7 @@ export function AgentKitRoot({
       reconnectAttempts,
       reconnectDelay,
       resolvedTransport,
-      threadId,
+      retainActiveRunsOnThreadRelease,
       transportOwnership,
       upload,
     ],

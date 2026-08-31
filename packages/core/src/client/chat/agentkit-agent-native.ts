@@ -8,6 +8,7 @@ import type {
 } from "@agent-native/agentkit-protocol";
 
 import { agentNativePath } from "../api-path.js";
+import { dispatchAgentChatRunning } from "../use-agent-chat-running-threads.js";
 import {
   AGENT_NATIVE_PROTOCOL_METADATA_KEY,
   createAgentKitProtocolAdapter,
@@ -457,7 +458,7 @@ export function createAgentNativeAgentKitTransport(
   const feedbackUrl =
     options.feedbackUrl ??
     agentNativePath("/_agent-native/observability/feedback");
-  transport = createAgentKitProtocolAdapter(runtime, {
+  const protocolTransport = createAgentKitProtocolAdapter(runtime, {
     ...options.adapter,
     metadata: adapterMetadata(options),
     capabilities: {
@@ -646,5 +647,93 @@ export function createAgentNativeAgentKitTransport(
       ...options.operations,
     },
   });
+  const startRun = protocolTransport.startRun.bind(protocolTransport);
+  const subscribeToRun =
+    protocolTransport.subscribeToRun.bind(protocolTransport);
+  transport = {
+    ...protocolTransport,
+    async startRun(input, context) {
+      dispatchAgentChatRunning({
+        isRunning: true,
+        phase: "working",
+        threadId: input.threadId,
+        tabId: input.threadId,
+      });
+      try {
+        const run = await startRun(input, context);
+        dispatchAgentChatRunning({
+          isRunning: true,
+          phase: "working",
+          threadId: input.threadId,
+          tabId: input.threadId,
+          runId: run.runId,
+        });
+        return run;
+      } catch (error) {
+        dispatchAgentChatRunning({
+          isRunning: false,
+          phase: "idle",
+          threadId: input.threadId,
+          tabId: input.threadId,
+          reason: "start_failed",
+        });
+        throw error;
+      }
+    },
+    async *subscribeToRun(input) {
+      dispatchAgentChatRunning({
+        isRunning: true,
+        phase: "working",
+        threadId: input.threadId,
+        tabId: input.threadId,
+        runId: input.runId,
+      });
+      const assistantMessageIds = new Set<string>();
+      let responseStarted = false;
+      for await (const event of subscribeToRun(input)) {
+        if (
+          event.type === "message.created" &&
+          event.message.role === "assistant"
+        ) {
+          assistantMessageIds.add(event.message.id);
+        }
+        const startsVisibleResponse =
+          (event.type === "message.created" &&
+            event.message.role === "assistant" &&
+            event.message.parts.some((part) => part.type !== "reasoning")) ||
+          (event.type === "message.delta" &&
+            assistantMessageIds.has(event.messageId) &&
+            event.text.trim().length > 0) ||
+          (event.type === "message.completed" &&
+            event.message.role === "assistant");
+        if (!responseStarted && startsVisibleResponse) {
+          responseStarted = true;
+          dispatchAgentChatRunning({
+            isRunning: true,
+            phase: "responding",
+            threadId: input.threadId,
+            tabId: input.threadId,
+            runId: input.runId,
+            reason: "response_started",
+          });
+        }
+        if (
+          event.type === "run.completed" ||
+          event.type === "run.failed" ||
+          event.type === "run.cancelled"
+        ) {
+          dispatchAgentChatRunning({
+            isRunning: false,
+            phase: "idle",
+            threadId: input.threadId,
+            tabId: input.threadId,
+            runId: input.runId,
+            reason: event.type,
+          });
+        }
+        yield event;
+      }
+    },
+  };
   return transport;
 }

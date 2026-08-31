@@ -187,6 +187,8 @@ export interface AgentKitLabels {
   connectionFailed: string;
   connectionAdminRequired: string;
   activities: string;
+  working: string;
+  workingFor: string;
   worked: string;
   workedFor: string;
   durationHourShort: string;
@@ -242,6 +244,8 @@ export const defaultAgentKitLabels: AgentKitLabels = {
   connectionFailed: "Connection failed",
   connectionAdminRequired: "Ask a workspace admin to connect this service.",
   activities: "Agent activity",
+  working: "Working",
+  workingFor: "Working for {{duration}}",
   worked: "Worked",
   workedFor: "Worked for {{duration}}",
   durationHourShort: "h",

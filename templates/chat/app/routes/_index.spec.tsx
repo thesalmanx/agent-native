@@ -152,7 +152,10 @@ describe("ChatRoute AgentKit surface", () => {
     );
     expect(routeState.rootProps).toMatchObject({
       transport: routeState.transport,
-      clientOptions: { transportOwnership: "owned" },
+      clientOptions: {
+        transportOwnership: "owned",
+        retainActiveRunsOnThreadRelease: true,
+      },
       labels: { composerPlaceholder: "chat.composerPlaceholder" },
       slots: {
         emptyState: expect.any(Function),
@@ -182,7 +185,7 @@ describe("ChatRoute AgentKit surface", () => {
     ).toBeNull();
   });
 
-  it("hands each routed thread transport to AgentKit as an owned resource", () => {
+  it("keeps one owned transport across routed threads", () => {
     routeState.threadId = "thread-one";
     act(() => root.render(<ChatRoute />));
     const firstTransport = routeState.transport;
@@ -191,11 +194,29 @@ describe("ChatRoute AgentKit surface", () => {
     act(() => root.render(<ChatRoute />));
     const secondTransport = routeState.transport;
 
-    expect(secondTransport).not.toBe(firstTransport);
+    expect(secondTransport).toBe(firstTransport);
+    expect(createTransport).toHaveBeenCalledTimes(1);
     expect(routeState.rootProps).toMatchObject({
       transport: secondTransport,
-      clientOptions: { transportOwnership: "owned" },
+      clientOptions: {
+        transportOwnership: "owned",
+        retainActiveRunsOnThreadRelease: true,
+      },
     });
+  });
+
+  it("switches the home composer to the new thread before navigation paints", () => {
+    act(() => root.render(<ChatRoute />));
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent("agent-chat:open-thread", {
+          detail: { threadId: "thread-new", newThread: true },
+        }),
+      );
+    });
+
+    expect(routeState.rootProps?.threadId).toBe("thread-new");
   });
 
   it("enters durable chat mode and exposes the workspace toolbar", () => {

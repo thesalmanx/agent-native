@@ -50,6 +50,11 @@ implement `AgentTransport` directly or expose it through the HTTP adapter.
   delegated, peer, and external agents. Append-only interactions preserve what
   agents did to one another, while agent-scoped activities preserve the actual
   work performed in the thread, workspace, or an external app.
+- Activities use a shared semantic kind taxonomy for status, reasoning, search,
+  reads, writes, edits, commands, checks, MCP calls, connections, navigation,
+  delegation, approvals, and generic tools. Adapters should publish an explicit
+  kind when they know it; `inferAgentActivityKind()` provides a conservative
+  fallback for runtimes that only expose stable tool identifiers.
 - Namespaced `x-*` message parts let a host add rich domain UI without forking
   the base union. The host owns validation and rendering for those parts.
 - `data` message parts carry opaque structured content for host-owned renderers
@@ -220,9 +225,9 @@ message.
 
 ## Product direction
 
-AgentKit is the official Agent Experience Framework for Agent-Native products.
-Its goal is to provide a complete agent surface without making every product
-adopt the same visual skin, agent backend, or workflow model.
+AgentKit is the agent interaction and experience layer for Agent-Native
+products. Its goal is to provide a complete agent surface without making every
+product adopt the same visual skin, agent backend, or workflow model.
 
 The framework is being built around these product goals:
 
@@ -251,10 +256,11 @@ and transport contracts.
 
 ## Product boundary
 
-AgentKit is independently embeddable while remaining Agent-Native's official
-Agent Experience Framework. Agent-Native owns application execution, actions,
-SQL, application state, auth, access, and persistence. AgentKit owns portable
-conversation semantics, deterministic client state, adapters, and agent UI.
+AgentKit is independently embeddable while remaining the standard agent
+experience layer for Agent-Native. Agent-Native owns application execution,
+actions, SQL, application state, auth, access, and persistence. AgentKit owns
+portable conversation semantics, deterministic client state, adapters, and
+agent UI.
 Toolkit owns the semantic design-system and workspace layer. See
 [ARCHITECTURE.md](./ARCHITECTURE.md) for the complete ownership and migration
 model.

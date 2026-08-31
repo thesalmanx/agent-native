@@ -26,14 +26,7 @@ import {
   McpConnectionSuggestion,
 } from "@agent-native/core/client/resources";
 import { IconLayoutSidebarRight } from "@tabler/icons-react";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router";
 
 import { Button } from "@/components/ui/button";
@@ -73,20 +66,39 @@ export default function ChatRoute() {
   const navigate = useNavigate();
   const t = useT();
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
-  const generatedThreadId = useRef(
-    `chat-${typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36)}`,
-  );
-  const resolvedThreadId = threadId ?? generatedThreadId.current;
-  const transport = useMemo(
+  const [homeThreadId, setHomeThreadId] = useState(
     () =>
-      createAgentNativeAgentKitTransport({
-        threadId: resolvedThreadId,
-        browserTabId: TAB_ID,
-        surface: "app",
-        adapter: { textFormat: "markdown" },
-      }),
-    [resolvedThreadId],
+      `chat-${typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36)}`,
   );
+  const resolvedThreadId = threadId ?? homeThreadId;
+  const [transport] = useState(() =>
+    createAgentNativeAgentKitTransport({
+      browserTabId: TAB_ID,
+      surface: "app",
+      adapter: { textFormat: "markdown" },
+    }),
+  );
+
+  useEffect(() => {
+    const handleOpenThread = (event: Event) => {
+      const detail = (
+        event as CustomEvent<{ threadId?: unknown; newThread?: unknown }>
+      ).detail;
+      if (detail?.newThread !== true || typeof detail.threadId !== "string") {
+        return;
+      }
+      setHomeThreadId(detail.threadId);
+    };
+    window.addEventListener("agent-chat:open-thread", handleOpenThread);
+    return () =>
+      window.removeEventListener("agent-chat:open-thread", handleOpenThread);
+  }, []);
+
+  useEffect(() => {
+    if (threadId) return;
+    markAgentChatHomeHandoff("chat");
+    navigate(chatThreadPath(homeThreadId), { replace: true });
+  }, [homeThreadId, navigate, threadId]);
 
   return (
     <div
@@ -101,7 +113,10 @@ export default function ChatRoute() {
         <CoreComposerRuntimeProvider>
           <AgentKitRoot
             transport={transport}
-            clientOptions={{ transportOwnership: "owned" }}
+            clientOptions={{
+              transportOwnership: "owned",
+              retainActiveRunsOnThreadRelease: true,
+            }}
             threadId={resolvedThreadId}
             labels={{ composerPlaceholder: t("chat.composerPlaceholder") }}
             slots={{

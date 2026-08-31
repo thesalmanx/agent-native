@@ -1186,6 +1186,54 @@ describe("AgentKitClient", () => {
     await vi.waitFor(() => expect(observedSignal?.aborted).toBe(true));
   });
 
+  it("retains active runs across thread release when the host owns background work", async () => {
+    const subscribed = Promise.withResolvers<void>();
+    let observedSignal: AbortSignal | undefined;
+    const transport: AgentTransport = {
+      capabilities: { resumableRuns: true, durableThreadSnapshots: true },
+      async startRun() {
+        return { runId: "run-1" };
+      },
+      async getThreadSnapshot() {
+        return {
+          id: "thread-1",
+          createdAt: "2026-08-29T00:00:00.000Z",
+          updatedAt: "2026-08-29T00:00:00.000Z",
+          messages: [],
+          runs: [
+            {
+              id: "run-1",
+              threadId: "thread-1",
+              status: "running",
+              lastSequence: 0,
+            },
+          ],
+          activeRunIds: ["run-1"],
+        };
+      },
+      async *subscribeToRun({ signal }) {
+        observedSignal = signal;
+        subscribed.resolve();
+        await new Promise<void>((resolve) =>
+          signal?.addEventListener("abort", () => resolve(), { once: true }),
+        );
+      },
+      async cancelRun() {},
+    };
+    const client = new AgentKitClient({
+      transport,
+      retainActiveRunsOnThreadRelease: true,
+    });
+
+    const lease = await client.openThread("thread-1");
+    await subscribed.promise;
+    lease.release();
+
+    expect(observedSignal?.aborted).toBe(false);
+    await client.dispose();
+    expect(observedSignal?.aborted).toBe(true);
+  });
+
   it("aborts a reconnect wait after authoritative cancellation", async () => {
     const cancelRun = vi.fn(async () => undefined);
     const transport: AgentTransport = {

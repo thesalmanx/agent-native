@@ -278,6 +278,20 @@
       "import": "./dist/utils.js",
       "default": "./dist/utils.js"
     },
+    "./streaming-text-smoothing": {
+      "types": "./dist/streaming-text-smoothing.d.ts",
+      "browser": "./dist/streaming-text-smoothing.js",
+      "development": "./dist/streaming-text-smoothing.js",
+      "import": "./dist/streaming-text-smoothing.js",
+      "default": "./dist/streaming-text-smoothing.js"
+    },
+    "./markdown-block-split": {
+      "types": "./dist/markdown-block-split.d.ts",
+      "browser": "./dist/markdown-block-split.js",
+      "development": "./dist/markdown-block-split.js",
+      "import": "./dist/markdown-block-split.js",
+      "default": "./dist/markdown-block-split.js"
+    },
     "./agent-native.eject.json": "./agent-native.eject.json",
     "./migration-manifest.json": "./migration-manifest.json",
     "./styles.css": "./dist/styles.css",

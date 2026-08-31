@@ -2,7 +2,7 @@
 "@agent-native/core": minor
 ---
 
-Integrate the Agent Experience Framework with Core through a formal adapter and
+Integrate AgentKit with Core through a formal adapter and
 first-party Agent-Native transport. Preserve replayable rich runtime events,
 action, context, access, audit, and trace metadata; expose truthful capability
 states and explicit failures; and support durable history, approvals, queue

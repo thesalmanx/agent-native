@@ -1,5 +1,6 @@
 import {
   navigateWithAgentChatViewTransition,
+  useAgentChatRunningThreads,
   useChatThreads,
   type ChatThreadSummary,
 } from "@agent-native/core/client/agent-chat";
@@ -18,6 +19,7 @@ import {
   IconEdit,
   IconLayoutSidebarLeftCollapse,
   IconLayoutSidebarLeftExpand,
+  IconLoader2,
   IconMessages,
   IconPin,
   IconSearch,
@@ -37,6 +39,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { APP_TITLE } from "@/lib/app-config";
+import { visibleChatThreads } from "@/lib/sidebar-thread-state";
 import { cn } from "@/lib/utils";
 
 const CHAT_STORAGE_KEY = "chat";
@@ -99,9 +102,11 @@ function formatRelativeTime(timestamp: number) {
 function ThreadHistoryTitle({
   thread,
   title,
+  running,
 }: {
   thread: ChatThreadSummary;
   title: string;
+  running: boolean;
 }) {
   const t = useT();
   const viewportRef = useRef<HTMLSpanElement>(null);
@@ -144,14 +149,30 @@ function ThreadHistoryTitle({
   return (
     <HoverCard openDelay={500} closeDelay={120}>
       <HoverCardTrigger asChild>
-        <span
-          ref={viewportRef}
-          className="chat-sidebar-thread-title"
-          data-overflow={isOverflowing ? "true" : "false"}
-        >
-          <span ref={contentRef} className="chat-sidebar-thread-title__content">
-            {title}
+        <span className="chat-sidebar-thread-title-shell">
+          <span
+            ref={viewportRef}
+            className="chat-sidebar-thread-title"
+            data-overflow={isOverflowing ? "true" : "false"}
+          >
+            <span
+              ref={contentRef}
+              className="chat-sidebar-thread-title__content"
+            >
+              {title}
+            </span>
           </span>
+          {running ? (
+            <IconLoader2
+              className="chat-sidebar-thread-running size-3.5 shrink-0 motion-safe:animate-spin"
+              strokeWidth={1.8}
+              role="status"
+              aria-label={t(
+                // i18n-key-ignore shared framework catalog
+                "agentChat.status.working",
+              )}
+            />
+          ) : null}
         </span>
       </HoverCardTrigger>
       <HoverCardContent
@@ -248,11 +269,12 @@ function ChatThreadsSection({ collapsed }: { collapsed: boolean }) {
     autoCreate: false,
     restoreActiveThread: false,
   });
+  const { workingThreadIds, observedThreadStarts } =
+    useAgentChatRunningThreads();
 
   const visibleThreads = useMemo(
-    () =>
-      threads.filter((thread) => thread.messageCount > 0 && !thread.archivedAt),
-    [threads],
+    () => visibleChatThreads(threads, observedThreadStarts),
+    [observedThreadStarts, threads],
   );
   const displayedActiveThreadId =
     threadIdFromPath(location.pathname) ??
@@ -265,7 +287,13 @@ function ChatThreadsSection({ collapsed }: { collapsed: boolean }) {
       const title = threadTitle(thread, untitledLabel);
       return {
         id: thread.id,
-        title: <ThreadHistoryTitle thread={thread} title={title} />,
+        title: (
+          <ThreadHistoryTitle
+            thread={thread}
+            title={title}
+            running={workingThreadIds.has(thread.id)}
+          />
+        ),
         titleText: title,
         pinned: Boolean(thread.pinnedAt),
       };
@@ -284,7 +312,7 @@ function ChatThreadsSection({ collapsed }: { collapsed: boolean }) {
       { id: "pinned", label: t("chat.pinned"), items: pinned },
       { id: "recents", label: t("chat.recents"), items: recent },
     ];
-  }, [t, visibleThreads]);
+  }, [t, visibleThreads, workingThreadIds]);
 
   useEffect(() => {
     const refresh = () => refreshThreads();
@@ -308,14 +336,19 @@ function ChatThreadsSection({ collapsed }: { collapsed: boolean }) {
   function openThread(threadId: string, options?: { isNew?: boolean }) {
     switchThread(threadId);
     persistActiveThreadId(threadId);
-    navigateWithAgentChatViewTransition(
-      navigate,
-      options?.isNew ? "/" : chatThreadPath(threadId),
-    );
+    if (options?.isNew) {
+      window.dispatchEvent(
+        new CustomEvent("agent-chat:open-thread", {
+          detail: { threadId, newThread: true },
+        }),
+      );
+    }
+    navigateWithAgentChatViewTransition(navigate, chatThreadPath(threadId));
+    if (options?.isNew) return;
     window.requestAnimationFrame(() => {
       window.dispatchEvent(
         new CustomEvent("agent-chat:open-thread", {
-          detail: { threadId, newThread: options?.isNew === true },
+          detail: { threadId, newThread: false },
         }),
       );
     });

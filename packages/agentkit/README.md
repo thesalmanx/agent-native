@@ -1,11 +1,12 @@
 # AgentKit
 
-Agent-Native is the application and execution platform. It owns actions, SQL
-data, application state, agent execution, authentication, access control, and
-deployment. AgentKit is its official Agent Experience Framework. It owns the
-portable conversation protocol, deterministic client, adapters, React bindings,
-and composable agent UI. Toolkit is the semantic design-system and workspace
-layer used to build the surrounding product experience.
+Agent-Native is the application framework and execution platform. It owns
+actions, SQL data, application state, agent execution, authentication, access
+control, and deployment. AgentKit is its agent interaction and experience
+layer. It owns the portable conversation protocol, deterministic client,
+adapters, React bindings, and composable agent UI. Toolkit supplies the semantic
+design-system and workspace building blocks used by AgentKit and the surrounding
+product experience.
 
 AgentKit stays provider-neutral. An Agent-Native app uses the first-party Core
 adapter. Another backend implements `AgentTransport` directly or exposes the
