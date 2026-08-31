@@ -135,9 +135,8 @@ async function waitForUrl(url: string, child: ChildProcess): Promise<void> {
       if (response.ok) {
         return;
       }
-    } catch {
-      // The bounded deadline below owns readiness failure.
-    }
+      // coercion-ok: readiness remains distinguishable because the bounded loop throws on timeout.
+    } catch {}
     await sleep(100);
   }
   throw new Error(`packed consumer did not become ready at ${url}`);

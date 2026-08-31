@@ -11,7 +11,10 @@ import {
   getBrowserTabId,
 } from "@agent-native/core/client/hooks";
 import { useT } from "@agent-native/core/client/i18n";
-import { buildSignInReturnHref } from "@agent-native/core/client/ui";
+import {
+  buildSignInReturnHref,
+  DefaultSpinner,
+} from "@agent-native/core/client/ui";
 import { docsUrl } from "@agent-native/core/shared";
 import {
   IconAlertTriangle,
@@ -50,6 +53,7 @@ import { toast } from "sonner";
 
 import { CaptureInstallButton } from "@/components/capture-install-options";
 import { AccessPasswordPrompt } from "@/components/player/access-password-prompt";
+import { ClipAgentWebMcp } from "@/components/player/clip-agent-webmcp";
 import { ClipsShareTrigger } from "@/components/player/clips-share-trigger";
 import { CommentsPanel } from "@/components/player/comments-panel";
 import { RecordingOptionsMenu } from "@/components/player/delete-recording-menu";
@@ -138,8 +142,6 @@ type SharePageLoaderData = {
   accessDeniedStatus?: 401 | 403;
   accessRequestToken?: string;
 };
-
-const CLIPS_AGENT_ACCESS_TTL_SECONDS = 2 * 60 * 60;
 
 function emptyLoaderData(
   url: URL,
@@ -276,41 +278,25 @@ export async function loader({ params, url }: LoaderFunctionArgs) {
     archivedAt: rec.archivedAt,
     trashedAt: rec.trashedAt,
   };
-  const canExposeAgentContext =
-    (rec.visibility === "public" || tokenGrantsAgentAccess) &&
+  const canExposeAnonymousAgentContext =
+    rec.visibility === "public" &&
+    !rec.password &&
     !rec.archivedAt &&
     !rec.trashedAt;
-  const token = tokenGrantsAgentAccess
-    ? agentAccessToken
-    : canExposeAgentContext &&
-        rec.password &&
-        getRequestUserEmail() === rec.ownerEmail
-      ? signScopedAgentAccessToken({
-          resourceKind: CLIP_AGENT_ACCESS_TOKEN_PREFIX,
-          resourceId: id,
-          ttlSeconds: CLIPS_AGENT_ACCESS_TTL_SECONDS,
-        })
-      : undefined;
-  const canExposeAnonymousAgentContext = canExposeAgentContext && !rec.password;
-  const canExposeOwnerAgentContext = canExposeAgentContext && Boolean(token);
   return shareLoaderData(
     {
       recording,
       origin: url.origin,
       shareUrl: `${url.origin}${url.pathname}`,
-      agentContextUrl:
-        canExposeAnonymousAgentContext || canExposeOwnerAgentContext
-          ? buildAgentApiUrls(id, {
-              origin: url.origin,
-              basePath:
-                process.env.VITE_APP_BASE_PATH ||
-                process.env.APP_BASE_PATH ||
-                "",
-              token,
-            }).contextUrl
-          : null,
+      agentContextUrl: canExposeAnonymousAgentContext
+        ? buildAgentApiUrls(id, {
+            origin: url.origin,
+            basePath:
+              process.env.VITE_APP_BASE_PATH || process.env.APP_BASE_PATH || "",
+          }).contextUrl
+        : null,
     },
-    hasAgentAccessToken || canExposeOwnerAgentContext,
+    hasAgentAccessToken,
   );
 }
 
@@ -347,9 +333,11 @@ function detectViewerPlatform(): ViewerPlatform | null {
 function AgentDiscovery({
   recording,
   agentContextUrl,
+  frameAvailable,
 }: {
   recording: Pick<SharePageMetaRecording, "id" | "title" | "status"> | null;
   agentContextUrl: string | null;
+  frameAvailable: boolean;
 }) {
   const t = useT();
   if (!recording || !agentContextUrl) return null;
@@ -376,6 +364,12 @@ function AgentDiscovery({
         type="application/agent-native+json"
         id="clips-agent-context"
         dangerouslySetInnerHTML={{ __html: safeJsonForHtml(payload) }}
+      />
+      <ClipAgentWebMcp
+        recordingId={recording.id}
+        agentContextUrl={agentContextUrl}
+        recordingStatus={recording.status}
+        frameAvailable={frameAvailable}
       />
     </>
   );
@@ -730,6 +724,7 @@ export default function ShareRoute() {
     <AgentDiscovery
       recording={recording ?? loaderData.recording}
       agentContextUrl={unlockedAgentContextUrl ?? loaderData.agentContextUrl}
+      frameAvailable={Boolean(recording) && !isLoomEmbedBacked}
     />
   );
 
@@ -877,9 +872,7 @@ export default function ShareRoute() {
     return (
       <>
         {agentDiscovery}
-        <div className="flex items-center justify-center h-screen w-full bg-background">
-          <Spinner className="h-8 w-8 text-muted-foreground" />
-        </div>
+        <DefaultSpinner />
       </>
     );
   }

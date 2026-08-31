@@ -6,6 +6,7 @@ import {
 import { PromptBar, PromptComposer } from "@agent-native/core/client/composer";
 import { useActionQuery } from "@agent-native/core/client/hooks";
 import { useT } from "@agent-native/core/client/i18n";
+import { useOrgRole } from "@agent-native/core/client/org";
 import { IconChevronDown, IconClockHour4, IconPlus } from "@tabler/icons-react";
 import type { ReactNode } from "react";
 import { useState } from "react";
@@ -68,6 +69,10 @@ function SectionHeader({
 
 function CommandPanel() {
   const t = useT();
+  const { org } = useOrgRole();
+  const draftScope = org?.orgId?.trim()
+    ? `dispatch:overview:${org.orgId}`
+    : "dispatch:overview";
   const {
     availableModels,
     isLoading: modelListLoading,
@@ -78,6 +83,15 @@ function CommandPanel() {
     selectedModel,
   } = useChatModels({ storageKey: chatModelSelectionStorageKey("dispatch") });
   const navigate = useNavigate();
+  const promptSuggestions = [
+    t("dispatch.pages.suggestionOnboardingApp", {
+      defaultValue: "Create an app for onboarding requests",
+    }),
+    t("dispatch.pages.suggestionAnalyticsAgents", {
+      defaultValue: "Check which agents can help with analytics",
+    }),
+  ];
+
   function send(message: string) {
     const trimmed = message.trim();
     if (!trimmed) return;
@@ -114,9 +128,10 @@ function CommandPanel() {
         <PromptBar mode="inline" className="contents">
           <PromptComposer
             availableModels={availableModels}
+            draftScope={draftScope}
             modelListLoading={modelListLoading}
             placeholder={t("dispatch.pages.overviewPromptPlaceholder", {
-              defaultValue: "What would you like to make happen?",
+              defaultValue: "Ask Dispatch anything...",
             })}
             selectedEffort={selectedEffort}
             selectedEngine={selectedEngine}
@@ -128,6 +143,18 @@ function CommandPanel() {
             onSubmit={(text) => send(text)}
           />
         </PromptBar>
+        <div className="mt-3 flex flex-wrap justify-center gap-2">
+          {promptSuggestions.map((suggestion) => (
+            <button
+              key={suggestion}
+              type="button"
+              onClick={() => send(suggestion)}
+              className="cursor-pointer rounded-md border border-transparent bg-muted/60 px-2.5 py-1.5 text-xs text-muted-foreground transition-[background-color,color] hover:bg-muted hover:text-foreground"
+            >
+              {suggestion}
+            </button>
+          ))}
+        </div>
       </div>
     </section>
   );

@@ -460,6 +460,27 @@
       "strategy": "source-copy",
       "sourceEntries": ["src/onboarding"],
       "targetRoot": "app/components/agent-native/toolkit",
+      "dependencies": ["react"],
+      "verification": ["pnpm typecheck"]
+    },
+    {
+      "id": "toolkit/marketing",
+      "label": "Marketing home shell",
+      "catalog": "toolkit-ui",
+      "catalogItems": ["marketing"],
+      "entrypoints": ["./marketing", "./marketing/*"],
+      "strategy": "source-copy",
+      "sourceEntries": ["src/marketing"],
+      "targetRoot": "app/components/agent-native/toolkit",
+      "dependencies": [
+        "@radix-ui/react-slot",
+        "class-variance-authority",
+        "culori",
+        "clsx",
+        "react",
+        "tailwind-merge"
+      ],
+      "protectedImports": ["@agent-native/toolkit/utils"],
       "verification": ["pnpm typecheck"]
     },
     {
@@ -578,6 +599,30 @@
       "sourceEntries": ["src/utils.ts"],
       "targetRoot": "app/components/agent-native/toolkit",
       "dependencies": ["clsx", "tailwind-merge"],
+      "verification": ["pnpm typecheck"]
+    },
+    {
+      "id": "toolkit/streaming-text-smoothing",
+      "label": "Streaming text smoothing",
+      "catalog": "toolkit-ui",
+      "catalogItems": ["streaming-text-smoothing"],
+      "entrypoints": ["./streaming-text-smoothing"],
+      "strategy": "source-copy",
+      "sourceEntries": ["src/streaming-text-smoothing.ts"],
+      "targetRoot": "app/components/agent-native/toolkit",
+      "dependencies": [],
+      "verification": ["pnpm typecheck"]
+    },
+    {
+      "id": "toolkit/markdown-block-split",
+      "label": "Streaming Markdown block splitting",
+      "catalog": "toolkit-ui",
+      "catalogItems": ["markdown-block-split"],
+      "entrypoints": ["./markdown-block-split"],
+      "strategy": "source-copy",
+      "sourceEntries": ["src/markdown-block-split.ts"],
+      "targetRoot": "app/components/agent-native/toolkit",
+      "dependencies": [],
       "verification": ["pnpm typecheck"]
     },
     {

@@ -13,6 +13,7 @@ export interface AgentAskPopoverProps {
   context?: string;
   className?: string;
   icon?: ReactNode;
+  draftScope?: string;
 }
 
 /** A low-emphasis entry point for asking the agent without losing the current surface. */
@@ -24,6 +25,7 @@ export function AgentAskPopover({
   context,
   className,
   icon,
+  draftScope,
 }: AgentAskPopoverProps) {
   const t = useT();
   const handleSubmit = useCallback(
@@ -44,6 +46,7 @@ export function AgentAskPopover({
     <PromptBar
       autoFocus
       attachmentsEnabled={false}
+      draftScope={draftScope}
       initialText={prompt}
       initialTextKey={prompt}
       placeholder={

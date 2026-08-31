@@ -32,6 +32,7 @@ function writeWithExecCommand(text: string): boolean {
   textarea.setSelectionRange(0, text.length);
   try {
     return document.execCommand("copy");
+    // coercion-ok: false is the clipboard contract's explicit failure result.
   } catch {
     return false;
   } finally {
@@ -52,9 +53,8 @@ export async function writeClipboardText(
     try {
       const result = await desktopClipboard.writeText?.(text);
       if (result !== false) return true;
-    } catch {
-      // A desktop bridge can be present but unavailable in this window.
-    }
+      // coercion-ok: a rejected host bridge deliberately falls through to browser and DOM fallbacks.
+    } catch {}
   }
 
   if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
@@ -72,17 +72,15 @@ export async function writeClipboardText(
           }),
         ]);
         return true;
-      } catch {
-        // Preserve a plain-text fallback when rich clipboard writes are denied.
-      }
+        // coercion-ok: a rejected rich write deliberately falls through to the plain-text writer.
+      } catch {}
     }
 
     try {
       await navigator.clipboard.writeText(text);
       return true;
-    } catch {
-      // Embedded surfaces can deny async clipboard even with clipboard-write.
-    }
+      // coercion-ok: a rejected async write deliberately falls through to the synchronous DOM fallback.
+    } catch {}
   }
 
   return writeWithExecCommand(text);

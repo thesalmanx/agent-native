@@ -1,9 +1,9 @@
 // Owns: tool-payload formatting helpers, ToolCallDisplay, ToolCallFallback,
 // and ReconnectStreamMessage used by AssistantChat.
 
+import { CubeLoader } from "@agent-native/toolkit/ui/cube-loader";
 import type { ToolCallMessagePartProps } from "@assistant-ui/react";
 import {
-  IconLoader2,
   IconAlertTriangle,
   IconCircleX,
   IconCheck,
@@ -166,7 +166,7 @@ export function toolCallHasPendingApproval(part: {
   );
 }
 
-export const TOOL_LONG_RUNNING_HINT_DELAY_MS = 45_000;
+export const TOOL_LONG_RUNNING_HINT_DELAY_MS = 5 * 60_000;
 
 export function ToolActivityPresentation({
   toolName,
@@ -1039,7 +1039,7 @@ function ToolCallDisplayGeneric({
       >
         <span className="relative flex size-4 shrink-0 items-center justify-center">
           {isRunning ? (
-            <IconLoader2 className="size-3.5 animate-spin" />
+            <CubeLoader aria-hidden="true" className="size-3.5" />
           ) : isAgentError ? (
             <IconCircleX className="size-3.5 text-destructive" />
           ) : isUnknownOutcome ? (
@@ -1265,7 +1265,7 @@ function AgentCallCell({
         className="agent-kit-density flex w-full items-center gap-1.5 rounded-md py-0.5 text-left text-muted-foreground transition-colors hover:text-foreground"
       >
         {isRunning ? (
-          <IconLoader2 className="size-3.5 animate-spin" />
+          <CubeLoader aria-hidden="true" className="size-3.5" />
         ) : isError ? (
           <IconCircleX className="size-3.5 text-destructive" />
         ) : (
@@ -1337,7 +1337,7 @@ function AgentActivityToolCallRow({
       <div className="agent-kit-density my-0.5 flex w-full items-center gap-1.5 rounded-md py-0.5 text-left text-muted-foreground">
         <span className="flex size-4 shrink-0 items-center justify-center">
           {isRunning ? (
-            <IconLoader2 className="size-3.5 animate-spin" />
+            <CubeLoader aria-hidden="true" className="size-3.5" />
           ) : (
             <ToolIcon className="size-3.5" />
           )}
@@ -1810,11 +1810,14 @@ export function useLocalizedWorkedDuration() {
 
 export function WorkedForSummary({
   durationMs,
+  isRunning = false,
   defaultOpen = false,
   autoCollapse = false,
   children,
 }: {
   durationMs?: number | null;
+  /** Show a live work label while the owning assistant turn streams. */
+  isRunning?: boolean;
   /** Keep completed work visible when the turn contains interactive UI. */
   defaultOpen?: boolean;
   /** When true, close the summary after a run has completed. */
@@ -1835,8 +1838,9 @@ export function WorkedForSummary({
     }
   }, [autoCollapse, defaultOpen]);
 
-  const label =
-    durationMs != null && durationMs >= 1000
+  const label = isRunning
+    ? t("agentChat.status.working")
+    : durationMs != null && durationMs >= 1000
       ? t("agentChat.tool.workedFor", {
           duration: formatDuration(durationMs),
         })

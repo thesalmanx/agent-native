@@ -91,6 +91,7 @@ import {
   type AgentLoopOutcome,
   type ResolvedOwnerApiKey,
 } from "../agent/production-agent.js";
+import type { ActiveRun } from "../agent/run-manager.js";
 import {
   callerHasRunAccess,
   callerHasThreadAccess,
@@ -116,6 +117,7 @@ import { attachToolSearch } from "../agent/tool-search.js";
 import type {
   AgentChatAttachment,
   AgentChatEvent,
+  AgentChatScope,
   MentionItemMedia,
   MentionProvider,
 } from "../agent/types.js";
@@ -431,6 +433,43 @@ export { resolveRecurringJobsBuildMarker };
 export { scheduledTriggerAvailability };
 export { shouldDisableRecurringJobsRuntime };
 export { finalizeClaimedAgentChatProcessRunFailure };
+
+function hasSuccessfulSideEffect(run: Pick<ActiveRun, "events">): boolean {
+  return run.events.some(
+    ({ event }) =>
+      event.type === "tool_done" &&
+      event.completedSideEffect === true &&
+      event.isError !== true,
+  );
+}
+
+export async function runPostAgentTurnAutosave(
+  callback: AgentChatPluginOptions["onAgentTurnComplete"] | undefined,
+  scope: AgentChatScope | null | undefined,
+  run: ActiveRun,
+): Promise<void> {
+  if (!callback || !scope || !hasSuccessfulSideEffect(run)) return;
+
+  try {
+    await callback(scope, run);
+  } catch (error) {
+    captureError(error, {
+      route: "agent-chat",
+      aiTraceId: run.runId,
+      tags: {
+        source: "agent-chat",
+        failureClass: "post-agent-turn-autosave",
+      },
+      extra: {
+        runId: run.runId,
+        threadId: run.threadId,
+        scopeType: scope.type,
+        scopeId: scope.id,
+      },
+    });
+    console.error("[agent-chat] post-agent-turn autosave failed:", error);
+  }
+}
 
 /**
  * The model this mount runs with, when the caller does not pass one per request.
@@ -2057,6 +2096,7 @@ export function createAgentChatPlugin(
                   ...urlTools,
                   ...chatScripts,
                   ...(a2aAgentDelegationEnabled ? callAgentScript : {}),
+                  ...automationTools,
                   ...fetchTool,
                   ...webSearchTool,
                   ...workspaceFilesTool,
@@ -2081,6 +2121,7 @@ export function createAgentChatPlugin(
                   ...urlTools,
                   ...chatScripts,
                   ...(a2aAgentDelegationEnabled ? callAgentScript : {}),
+                  ...automationTools,
                   ...fetchTool,
                   ...webSearchTool,
                   ...workspaceFilesTool,
@@ -2879,12 +2920,16 @@ export function createAgentChatPlugin(
 
       // Callback to persist agent response when run finishes (even if client disconnected).
       // Reconstructs the assistant message from buffered events and appends to thread_data.
-      const onRunComplete = async (run: any, threadId: string | undefined) => {
+      const onRunComplete = async (
+        run: ActiveRun,
+        threadId: string | undefined,
+      ) => {
         const runThreadId = String(run?.threadId ?? threadId ?? "");
         if (!threadId) {
           if (runThreadId) preRunGitStatusByThread.delete(runThreadId);
           return;
         }
+        const chatScope = getRequestRunContext()?.chatScope;
         // Serialize the read-modify-write against the same thread's other
         // `thread_data` writers (setThreadQueuedMessages, setThreadEngineMeta,
         // the frontend-triggered saves below). Without the lock, a concurrent
@@ -2901,6 +2946,7 @@ export function createAgentChatPlugin(
             run.events ?? [],
             run.runId,
             {
+              scope: chatScope,
               suppressInternalContinuation: true,
               turnId:
                 typeof run.turnId === "string" && run.turnId
@@ -2942,6 +2988,7 @@ export function createAgentChatPlugin(
               typeof run.turnId === "string" && run.turnId
                 ? run.turnId
                 : undefined,
+            parentId: run.parentId,
           });
 
           // Store debug metadata so we can inspect what the LLM actually
@@ -2966,9 +3013,18 @@ export function createAgentChatPlugin(
           );
         });
 
-        // Keep SQL run completion gated only on durable thread data. Follow-up
-        // hooks are useful, but they should never leave agent_runs stuck
-        // "running" if an automation/checkpoint path stalls.
+        // Checkpoint creation is part of durable turn completion. The helper
+        // catches and reports its own failures, so a broken app checkpoint does
+        // not strand the run while a successful checkpoint cannot be lost when
+        // a serverless invocation exits.
+        await runPostAgentTurnAutosave(
+          options?.onAgentTurnComplete,
+          chatScope,
+          run,
+        );
+
+        // Event triggers and local git checkpoints remain best effort and do
+        // not extend the durable chat persistence gate.
         void (async () => {
           // Emit agent.turn.completed for automation triggers.
           //
@@ -3857,7 +3913,7 @@ Non-code requests are still fine on this surface: read data, navigate the UI, su
             runCtx.runId = runId;
           }
         },
-        onRunComplete: async (run: any, threadId: string | undefined) => {
+        onRunComplete: async (run: ActiveRun, threadId: string | undefined) => {
           if (threadId) _runSendByThread.delete(threadId);
           await onRunComplete(run, threadId);
         },
@@ -3915,7 +3971,10 @@ Non-code requests are still fine on this surface: read data, navigate the UI, su
                   runCtx.runId = runId;
                 }
               },
-              onRunComplete: async (run: any, threadId: string | undefined) => {
+              onRunComplete: async (
+                run: ActiveRun,
+                threadId: string | undefined,
+              ) => {
                 if (threadId) _runSendByThread.delete(threadId);
                 await onRunComplete(run, threadId);
               },
@@ -4173,7 +4232,10 @@ Non-code requests are still fine on this surface: read data, navigate the UI, su
               runCtx.runId = runId;
             }
           },
-          onRunComplete: async (run: any, threadId: string | undefined) => {
+          onRunComplete: async (
+            run: ActiveRun,
+            threadId: string | undefined,
+          ) => {
             if (threadId) _runSendByThread.delete(threadId);
             await onRunComplete(run, threadId);
           },
@@ -7204,49 +7266,37 @@ Non-code requests are still fine on this surface: read data, navigate the UI, su
       });
 
       // ─── Trigger Dispatcher (event-based automations) ─────────────────
-      if (disableRecurringJobsRuntime) {
-        if (process.env.DEBUG) {
-          console.log(
-            "[triggers] Trigger dispatcher disabled for local development",
+      // Event and webhook automations remain live when the recurring scheduler
+      // is disabled; only the cron driver is gated above.
+      const { initTriggerDispatcher } =
+        await import("../triggers/dispatcher.js");
+      await initTriggerDispatcher({
+        getActions: getBackgroundActionEntries,
+        getSystemPrompt: async (owner: string) => {
+          const resources = await loadResourcesForPrompt(
+            owner,
+            lazyContext,
+            options?.appId,
+            undefined,
+            { disabledFrameworkGroups },
           );
-        }
-      } else {
-        try {
-          const { initTriggerDispatcher } =
-            await import("../triggers/dispatcher.js");
-          await initTriggerDispatcher({
-            getActions: getBackgroundActionEntries,
-            getSystemPrompt: async (owner: string) => {
-              const resources = await loadResourcesForPrompt(
-                owner,
-                lazyContext,
-                options?.appId,
-                undefined,
-                { disabledFrameworkGroups },
-              );
-              const schemaBlock = lazyContext
-                ? ""
-                : await buildSchemaBlock(owner, databaseToolsMode);
-              return basePrompt + resources + schemaBlock;
-            },
-            // See the matching comment on schedulerDeps.getInitialToolNames
-            // above — same shared `basePrompt`, same reasoning.
-            getInitialToolNames: (automation?: RecurringJobContext) => [
-              ...effectiveInitialToolNames,
-              "manage-jobs",
-              "manage-progress",
-              ...(automation?.meta.mcpTools ?? []),
-            ],
-            apiKey: options?.apiKey,
-            model: resolveConfiguredAgentModel(options),
-            appId: options?.appId,
-          });
-          if (process.env.DEBUG)
-            console.log("[triggers] Trigger dispatcher initialized");
-        } catch {
-          // Triggers module not available — skip silently
-        }
-      }
+          const schemaBlock = lazyContext
+            ? ""
+            : await buildSchemaBlock(owner, databaseToolsMode);
+          return basePrompt + resources + schemaBlock;
+        },
+        // See the matching comment on schedulerDeps.getInitialToolNames
+        // above — same shared `basePrompt`, same reasoning.
+        getInitialToolNames: (automation?: RecurringJobContext) => [
+          ...effectiveInitialToolNames,
+          "manage-jobs",
+          "manage-progress",
+          ...(automation?.meta.mcpTools ?? []),
+        ],
+        apiKey: options?.apiKey,
+        model: resolveConfiguredAgentModel(options),
+        appId: options?.appId,
+      });
     })().catch((err) => {
       // If the init fails, the routes never get registered and requests
       // to /_agent-native/agent-chat silently 404. Register a fallback

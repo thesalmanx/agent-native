@@ -1,5 +1,5 @@
 ---
-"@agent-native/core": minor
+"@agent-native/core": patch
 ---
 
 Integrate AgentKit with Core through a formal adapter and

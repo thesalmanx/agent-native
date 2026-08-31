@@ -5,7 +5,7 @@
 "@agent-native/agentkit-conformance": minor
 "@agent-native/agentkit-protocol": minor
 "@agent-native/agentkit-react": minor
-"@agent-native/core": minor
+"@agent-native/core": patch
 "@agent-native/toolkit": minor
 ---
 
