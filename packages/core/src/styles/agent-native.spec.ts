@@ -215,6 +215,20 @@ describe("agent-native shell surface tokens", () => {
     );
   });
 
+  it("gives the light composer a quiet boundary without a dark-mode highlight", () => {
+    const tokens = readFileSync(
+      new URL("./tokens/agent-kit.css", import.meta.url),
+      { encoding: "utf8" },
+    );
+
+    expect(tokens).toMatch(
+      /:root\s*\{[\s\S]*?--agent-kit-composer-border-opacity: 0\.82;[\s\S]*?--agent-kit-composer-focus-border-opacity: 1;/s,
+    );
+    expect(tokens).toMatch(
+      /\.dark\s*\{[\s\S]*?--agent-kit-composer-border-opacity: 0;[\s\S]*?--agent-kit-composer-focus-border-opacity: 0;/s,
+    );
+  });
+
   it("keeps the active tool shine clipped to its label text", () => {
     const css = readFileSync(new URL("./agent-native.css", import.meta.url), {
       encoding: "utf8",

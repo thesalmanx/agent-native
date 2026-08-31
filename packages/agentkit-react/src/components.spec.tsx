@@ -190,6 +190,14 @@ describe("AgentKitChat", () => {
     expect(styles).not.toContain("light-dark(");
     expect(styles).not.toContain("--agentkit-elevation-shadow-color");
     expect(styles).toContain("var(--agent-kit-composer-elevation, none)");
+    expect(styles).toContain("--agent-kit-composer-border-color,");
+    expect(styles).toContain("--agent-kit-composer-focus-border-color,");
+    expect(styles).toContain(
+      "border: 1px solid var(--agentkit-composer-border)",
+    );
+    expect(styles).toContain(
+      "border-color: var(--agentkit-composer-focus-border)",
+    );
     expect(styles).toContain("var(--agent-kit-overlay-elevation, none)");
     expect(styles).toContain("var(--agent-kit-control-elevation, none)");
     expect(styles).toContain("--agent-kit-composer-toolbar-control-font-size,");
@@ -233,7 +241,9 @@ describe("AgentKitChat", () => {
     const composerFocusRule = styles.match(
       /\.agentkit-composer\[data-agent-composer-slot="root"\]:focus-within \{([^}]*)\}/,
     )?.[1];
-    expect(composerFocusRule).toContain("border-color: transparent");
+    expect(composerFocusRule).toContain(
+      "border-color: var(--agentkit-composer-focus-border)",
+    );
     expect(composerFocusRule).not.toContain("var(--agentkit-border)");
     expect(composerFocusRule).not.toContain("var(--agentkit-focus)");
   });

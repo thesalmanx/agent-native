@@ -31,6 +31,14 @@
   --agentkit-radius: var(--radius-xl, calc(var(--radius, 0.75rem) + 0.5rem));
   --agentkit-radius-inner: var(--radius-lg, var(--radius, 0.75rem));
   --agentkit-elevation: var(--agent-kit-composer-elevation, none);
+  --agentkit-composer-border: var(
+    --agent-kit-composer-border-color,
+    transparent
+  );
+  --agentkit-composer-focus-border: var(
+    --agent-kit-composer-focus-border-color,
+    transparent
+  );
   --agentkit-composer-toolbar-control-size: var(
     --agent-kit-composer-toolbar-control-size,
     1.75rem
@@ -93,7 +101,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid transparent;
+  border: 1px solid var(--agentkit-composer-border);
   border-radius: var(--agentkit-radius);
   color: var(--agentkit-text);
   background: var(--agentkit-surface);
@@ -101,7 +109,7 @@
 }
 
 .agentkit-composer[data-agent-composer-slot="root"]:focus-within {
-  border-color: transparent;
+  border-color: var(--agentkit-composer-focus-border);
 }
 
 .agentkit-composer [data-agent-composer-slot="editor-wrap"] {
