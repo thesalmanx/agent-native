@@ -57,6 +57,8 @@ export interface MessageQueueDrawerProps {
   labels: MessageQueueDrawerLabels;
   /** Visual treatment for the queue's relationship to the composer. */
   variant?: MessageQueueDrawerVariant;
+  /** Prevents queue mutations while a host command is pending. */
+  disabled?: boolean;
   className?: string;
 }
 
@@ -86,6 +88,7 @@ export function MessageQueueDrawer({
   renderText,
   labels,
   variant = "default",
+  disabled = false,
   className,
 }: MessageQueueDrawerProps) {
   const recessed = variant === "recessed";
@@ -158,6 +161,7 @@ export function MessageQueueDrawer({
                           type="button"
                           variant="ghost"
                           size="sm"
+                          disabled={disabled}
                           onClick={() => onSteer(item)}
                           className="h-7 gap-1 px-1.5 text-xs font-normal text-muted-foreground hover:text-foreground"
                         >
@@ -178,6 +182,7 @@ export function MessageQueueDrawer({
                         type="button"
                         variant="ghost"
                         size="icon"
+                        disabled={disabled}
                         onClick={() => onRemove(item)}
                         aria-label={labels.remove}
                         className="size-7 text-muted-foreground hover:text-foreground"
@@ -200,6 +205,7 @@ export function MessageQueueDrawer({
                               type="button"
                               variant="ghost"
                               size="icon"
+                              disabled={disabled}
                               aria-label={labels.moreActions}
                               className="size-7 text-muted-foreground hover:text-foreground"
                             >
@@ -221,7 +227,7 @@ export function MessageQueueDrawer({
                         {actions.map((action) => (
                           <DropdownMenuItem
                             key={action.id}
-                            disabled={action.disabled}
+                            disabled={disabled || action.disabled}
                             onSelect={() => action.onSelect(item)}
                             className={cn(
                               action.destructive &&

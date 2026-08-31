@@ -1,3 +1,4 @@
+import type { AgentSuggestion } from "@agent-native/agentkit-protocol";
 import type { ChatModelRunResult } from "@assistant-ui/react";
 
 import type { A2AAgentActivitySnapshot } from "../a2a/activity.js";
@@ -7,6 +8,7 @@ import {
   LLM_MISSING_CREDENTIALS_MESSAGE,
 } from "../agent/engine/credential-errors.js";
 import { BUILDER_GATEWAY_INTERNAL_ERROR_CODE } from "../agent/engine/error-detail.js";
+import type { AgentChatRichEventEnvelope } from "../agent/types.js";
 import type { AgentMcpAppPayload } from "../mcp-client/app-result.js";
 import { emitChatFirstOpenApp } from "./chat-first.js";
 import { formatChatErrorText, normalizeChatError } from "./error-format.js";
@@ -76,6 +78,8 @@ export type ContentPart =
 export interface SSEEvent {
   type: string;
   text?: string;
+  suggestions?: AgentSuggestion[];
+  event?: AgentChatRichEventEnvelope;
   tool?: string;
   /** Server-assigned call identifier emitted on tool_start / tool_done events. */
   id?: string;
@@ -96,6 +100,11 @@ export interface SSEEvent {
   askId?: string;
   /** False when this action requires a fresh approval for every call. */
   allowPersistentApproval?: false;
+  /** Host-resolved connection request. URLs and scopes are never streamed. */
+  requestId?: string;
+  provider?: string;
+  connectionReason?: "connect" | "grant" | "reauthorize" | "admin_required";
+  appId?: string;
   error?: string;
   seq?: number;
   agent?: string;
@@ -105,6 +114,7 @@ export interface SSEEvent {
   detail?: string;
   agentCallId?: string;
   durationMs?: number;
+  terminalCode?: string;
   snapshot?: A2AAgentActivitySnapshot;
   reason?: string;
   // Agent task fields

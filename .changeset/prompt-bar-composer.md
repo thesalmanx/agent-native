@@ -1,6 +1,8 @@
 ---
 "@agent-native/toolkit": minor
-"@agent-native/core": patch
 ---
 
-Add composable PromptBar, agent-authored next-action suggestions, message-queue, and compact assistant action surfaces for aligned contextual agent menus, prompt composition, queued follow-ups, and clean response interactions.
+Add shared composer and clipboard primitives for a composable PromptBar, agent-authored next
+actions, a recessed message queue, contextual tool and slash discovery, voice
+controls, compact assistant actions, stable focus, accessible multiline input,
+and semantic elevation that remains correct across light and dark surfaces.

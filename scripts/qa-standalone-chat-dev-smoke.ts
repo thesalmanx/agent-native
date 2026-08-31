@@ -25,11 +25,17 @@ import assert from "node:assert/strict";
 import {
   execFileSync,
   spawn,
-  type ChildProcessWithoutNullStreams,
+  type ChildProcess,
   type ExecFileSyncOptions,
 } from "node:child_process";
 import fs from "node:fs";
+import {
+  createServer,
+  type IncomingMessage,
+  type ServerResponse,
+} from "node:http";
 import { createRequire } from "node:module";
+import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -77,7 +83,19 @@ function log(step: string): void {
 }
 
 const cliEntry = path.join(repoRoot, "packages/core/dist/cli/index.js");
+const pnpmBin = process.env.STANDALONE_CHAT_DEV_SMOKE_PNPM || "pnpm";
+const approvalActionFixture = path.join(
+  repoRoot,
+  "scripts/fixtures/agentkit-acceptance/accept-agentkit-release.ts",
+);
+const acceptanceTransportFixture = path.join(
+  repoRoot,
+  "scripts/fixtures/agentkit-acceptance/transport.ts",
+);
 const nodeBin = process.execPath;
+const installTimeoutMs = Number(
+  process.env.AGENTKIT_ACCEPTANCE_INSTALL_TIMEOUT_MS || 300_000,
+);
 
 type ApiResponseShape = {
   ok: boolean | (() => boolean);
@@ -101,7 +119,7 @@ interface ViteReloadTracker {
 
 interface RunningDev {
   baseUrl: string;
-  child: ChildProcessWithoutNullStreams;
+  child: ChildProcess;
   closed: Promise<void>;
   isClosed: () => boolean;
   logs: string[];
@@ -141,6 +159,60 @@ function run(
   }) as string;
 }
 
+async function runLive(
+  cmd: string,
+  args: string[],
+  options: {
+    cwd: string;
+    timeoutMs: number;
+    label: string;
+    env?: NodeJS.ProcessEnv;
+  },
+): Promise<void> {
+  log(`${options.label}: ${cmd} ${args.join(" ")}`);
+  const child = spawn(cmd, args, {
+    cwd: options.cwd,
+    env: { ...process.env, NO_COLOR: "1", ...options.env },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const output: string[] = [];
+  const append = (chunk: Buffer | string) => {
+    const text = chunk.toString();
+    output.push(text);
+    if (output.length > 300) output.shift();
+    process.stdout.write(text);
+  };
+  child.stdout.on("data", append);
+  child.stderr.on("data", append);
+  let timedOut = false;
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    child.kill("SIGTERM");
+    setTimeout(() => child.kill("SIGKILL"), 5_000).unref();
+  }, options.timeoutMs);
+  try {
+    const result = await new Promise<{
+      code: number | null;
+      signal: NodeJS.Signals | null;
+    }>((resolve, reject) => {
+      child.once("error", reject);
+      child.once("close", (code, signal) => resolve({ code, signal }));
+    });
+    if (timedOut) {
+      throw new Error(
+        `${options.label} exceeded ${options.timeoutMs}ms.\n${output.join("")}`,
+      );
+    }
+    if (result.code !== 0) {
+      throw new Error(
+        `${options.label} failed with exit ${String(result.code)} (${String(result.signal)}).\n${output.join("")}`,
+      );
+    }
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function scaffoldStandaloneChat(): void {
   log(`scaffolding ${appName} into ${scaffoldParent}`);
   if (!fs.existsSync(cliEntry)) {
@@ -162,9 +234,84 @@ function scaffoldStandaloneChat(): void {
   assert.equal(fs.existsSync(path.join(appDir, "package.json")), true);
 }
 
-function installApp(): void {
+function installApprovalActionFixture(): void {
+  assert.equal(fs.existsSync(approvalActionFixture), true);
+  fs.copyFileSync(
+    approvalActionFixture,
+    path.join(appDir, "actions/accept-agentkit-release.ts"),
+  );
+
+  const agentChatPluginPath = path.join(appDir, "server/plugins/agent-chat.ts");
+  const source = fs.readFileSync(agentChatPluginPath, "utf8");
+  if (source.includes('"accept-agentkit-release"')) return;
+
+  const initialToolsAnchor =
+    'const INITIAL_TOOL_NAMES = ["view-screen", "navigate", "hello"];';
+  assert.equal(
+    source.split(initialToolsAnchor).length - 1,
+    1,
+    "generated Chat app must expose the expected initial-tool declaration",
+  );
+  fs.writeFileSync(
+    agentChatPluginPath,
+    source.replace(
+      initialToolsAnchor,
+      'const INITIAL_TOOL_NAMES = [\n  "view-screen",\n  "navigate",\n  "hello",\n  "accept-agentkit-release",\n];',
+    ),
+  );
+}
+
+function installAcceptanceTransportFixture(): void {
+  assert.equal(fs.existsSync(acceptanceTransportFixture), true);
+  const fixtureTarget = path.join(
+    appDir,
+    "app/lib/agentkit-acceptance-transport.ts",
+  );
+  fs.copyFileSync(acceptanceTransportFixture, fixtureTarget);
+
+  const routePath = path.join(appDir, "app/routes/_index.tsx");
+  const source = fs.readFileSync(routePath, "utf8");
+  if (source.includes("instrumentAgentKitAcceptanceTransport(")) return;
+  const importAnchor = 'import { TAB_ID } from "@/lib/tab-id";';
+  const transportAnchor = "      createAgentNativeAgentKitTransport({";
+  const closeAnchor = "      }),\n    [resolvedThreadId],";
+  assert.equal(
+    source.split(importAnchor).length - 1,
+    1,
+    "generated Chat route import anchor changed",
+  );
+  assert.equal(
+    source.split(transportAnchor).length - 1,
+    1,
+    "generated Chat transport anchor changed",
+  );
+  assert.equal(
+    source.split(closeAnchor).length - 1,
+    1,
+    "generated Chat transport close anchor changed",
+  );
+  fs.writeFileSync(
+    routePath,
+    source
+      .replace(
+        importAnchor,
+        `${importAnchor}\nimport { instrumentAgentKitAcceptanceTransport } from "@/lib/agentkit-acceptance-transport";`,
+      )
+      .replace(
+        transportAnchor,
+        "      instrumentAgentKitAcceptanceTransport(\n        createAgentNativeAgentKitTransport({",
+      )
+      .replace(closeAnchor, "        }),\n      ),\n    [resolvedThreadId],"),
+  );
+}
+
+async function installApp(): Promise<void> {
   log(`pnpm install in ${appDir}`);
-  run("pnpm", ["install"], { cwd: appDir });
+  await runLive(pnpmBin, ["install"], {
+    cwd: appDir,
+    timeoutMs: installTimeoutMs,
+    label: "generated Chat dependency installation",
+  });
 }
 
 function assertStandalonePackageJson(): void {
@@ -185,6 +332,37 @@ function assertStandalonePackageJson(): void {
       assert.ok(
         !value.startsWith("catalog:"),
         `${depType}.${name} must not be catalog:* (${value})`,
+      );
+    }
+  }
+
+  if (process.env.AGENT_NATIVE_CREATE_USE_LOCAL_CORE !== "0") {
+    assert.match(
+      pkg.dependencies?.["@agent-native/agentkit"] ?? "",
+      /^file:\/\//,
+      "standalone Chat must install the current local AgentKit artifact",
+    );
+    assert.match(
+      pkg.dependencies?.["@agent-native/agentkit-react"] ?? "",
+      /^file:\/\//,
+      "standalone Chat must install the current local AgentKit React artifact",
+    );
+    const workspaceYaml = fs.readFileSync(
+      path.join(appDir, "pnpm-workspace.yaml"),
+      "utf8",
+    );
+    for (const packageName of [
+      "agentkit-protocol",
+      "agentkit-client",
+      "agentkit-adapters",
+      "agentkit-conformance",
+      "agentkit-react",
+      "agentkit",
+    ]) {
+      assert.match(
+        workspaceYaml,
+        new RegExp(`\"@agent-native/${packageName}\": \\"file://`),
+        `standalone Chat must override @agent-native/${packageName} to the current local artifact`,
       );
     }
   }
@@ -220,7 +398,11 @@ function prepareIsolatedDataDir(): string {
   return path.join(dataDir, "smoke.db");
 }
 
-function devEnv(baseUrl: string, dbPath: string): NodeJS.ProcessEnv {
+function devEnv(
+  baseUrl: string,
+  dbPath: string,
+  providerBaseUrl: string,
+): NodeJS.ProcessEnv {
   const databaseUrl = `file:${dbPath}`;
   return {
     ...process.env,
@@ -231,6 +413,18 @@ function devEnv(baseUrl: string, dbPath: string): NodeJS.ProcessEnv {
     DATABASE_URL: databaseUrl,
     DATABASE_AUTH_TOKEN: "",
     AUTH_SKIP_EMAIL_VERIFICATION: "1",
+    AGENT_ENGINE: "ai-sdk:openai",
+    AGENT_MODEL: "agentkit-loopback",
+    OPENAI_API_KEY: "sk-agentkit-loopback-not-a-real-key",
+    OPENAI_BASE_URL: providerBaseUrl,
+    ANTHROPIC_API_KEY: "",
+    BUILDER_PRIVATE_KEY: "",
+    BUILDER_PUBLIC_KEY: "",
+    COHERE_API_KEY: "",
+    GOOGLE_GENERATIVE_AI_API_KEY: "",
+    GROQ_API_KEY: "",
+    MISTRAL_API_KEY: "",
+    OPENROUTER_API_KEY: "",
     NETLIFY: "",
     VERCEL: "",
     CF_PAGES: "",
@@ -272,22 +466,17 @@ async function waitForViteDepsQuiet(
 ): Promise<void> {
   const quietMs = options.quietMs ?? (isCi ? 8_000 : 4_000);
   const timeoutMs = options.timeoutMs ?? 120_000;
+  const noReloadDeadline = Date.now() + (isCi ? 10_000 : 5_000);
   const deadline = Date.now() + timeoutMs;
 
   while (Date.now() < deadline) {
     if (viteReload.lastReloadAt === 0) {
+      if (Date.now() >= noReloadDeadline) return;
       await sleep(500);
       continue;
     }
     if (Date.now() - viteReload.lastReloadAt >= quietMs) return;
     await sleep(500);
-  }
-
-  if (viteReload.lastReloadAt === 0) {
-    console.warn(
-      "[standalone-dev-smoke] no Vite reload logs seen before timeout; continuing",
-    );
-    return;
   }
 
   throw new Error(
@@ -430,7 +619,7 @@ async function waitForUnauthenticatedPollReady(
   );
 }
 
-async function startDevOnce(): Promise<RunningDev> {
+async function startDevOnce(providerBaseUrl: string): Promise<RunningDev> {
   tryFreePort(port);
   const baseUrl = `http://127.0.0.1:${port}`;
   const dbPath = prepareIsolatedDataDir();
@@ -451,7 +640,7 @@ async function startDevOnce(): Promise<RunningDev> {
     ],
     {
       cwd: appDir,
-      env: devEnv(baseUrl, dbPath),
+      env: devEnv(baseUrl, dbPath, providerBaseUrl),
       stdio: ["ignore", "pipe", "pipe"],
       detached: process.platform !== "win32",
     },
@@ -499,11 +688,11 @@ async function startDevOnce(): Promise<RunningDev> {
   }
 }
 
-async function startDev(): Promise<RunningDev> {
+async function startDev(providerBaseUrl: string): Promise<RunningDev> {
   let lastError: unknown;
   for (let attempt = 0; attempt < devStartAttempts; attempt++) {
     try {
-      return await startDevOnce();
+      return await startDevOnce(providerBaseUrl);
     } catch (err) {
       lastError = err;
       const message = err instanceof Error ? err.message : String(err);
@@ -556,12 +745,19 @@ async function stopDev(running: RunningDev): Promise<void> {
 }
 
 async function launchBrowser(): Promise<Browser> {
+  const launchOptions = {
+    headless: !headed,
+    args: [
+      "--use-fake-device-for-media-stream",
+      "--use-fake-ui-for-media-stream",
+    ],
+  } as const;
   const channel =
     process.env.PLAYWRIGHT_CHANNEL ||
     (process.env.CI || process.env.GITHUB_ACTIONS ? undefined : "chrome");
   if (channel) {
     try {
-      return await chromium.launch({ channel, headless: !headed });
+      return await chromium.launch({ channel, ...launchOptions });
     } catch (channelError) {
       if (process.env.PLAYWRIGHT_CHANNEL) throw channelError;
       log(
@@ -570,7 +766,7 @@ async function launchBrowser(): Promise<Browser> {
     }
   }
   try {
-    return await chromium.launch({ headless: !headed });
+    return await chromium.launch(launchOptions);
   } catch (bundledError) {
     throw new Error(
       [
@@ -685,18 +881,48 @@ function suppressedNoiseBlock(): string {
 }
 
 function isBenignConsoleError(text: string): boolean {
-  if (text.startsWith("Failed to load resource:")) return true;
   if (text.includes("favicon")) return true;
+  // The response listener classifies these with the request URL and status;
+  // Chromium's duplicate console message omits both pieces of evidence.
+  if (
+    text.startsWith(
+      "Failed to load resource: the server responded with a status of",
+    )
+  ) {
+    return true;
+  }
   return false;
 }
 
-function isBenignHttpError(status: number, url: string): boolean {
-  if (status === 404 && url.includes("/_agent-native/agent-chat/threads/")) {
+interface BrowserNetworkState {
+  allowInitialEphemeralThread404: boolean;
+  allowExpectedIncompleteStreamFailure: boolean;
+  navigationCancellationUntil: number;
+}
+
+function isBenignHttpError(
+  status: number,
+  url: string,
+  state: BrowserNetworkState,
+): boolean {
+  if (
+    state.allowExpectedIncompleteStreamFailure &&
+    status >= 500 &&
+    url.includes("/_agent-native/agent-chat")
+  ) {
+    return true;
+  }
+  if (
+    state.allowInitialEphemeralThread404 &&
+    status === 404 &&
+    url.includes("/_agent-native/agent-chat/threads/")
+  ) {
     return true;
   }
   // Chat can request checkpoints for a client-created thread before its first
   // message persists that thread on the server.
   if (
+    state.allowInitialEphemeralThread404 &&
     status === 404 &&
     url.includes("/_agent-native/agent-chat/checkpoints?")
   ) {
@@ -729,7 +955,7 @@ async function waitForHomeLink(
   options: WaitForHomeLinkOptions = {},
 ): Promise<void> {
   const { baseUrl, renavigateOnTimeout = false } = options;
-  const homeLink = page.getByRole("link", { name: /^(Home|Chat)$/ });
+  const homeLink = page.getByRole("button", { name: /^New Chat$/i });
   const deadline = Date.now() + timeoutMs;
 
   while (Date.now() < deadline) {
@@ -769,7 +995,7 @@ async function waitForHomeLink(
     .innerText({ timeout: 5_000 })
     .catch(() => "");
   throw new Error(
-    `Home/Chat link not visible within ${timeoutMs}ms at ${page.url()}.\n` +
+    `Chat shell New Chat control not visible within ${timeoutMs}ms at ${page.url()}.\n` +
       `Body preview: ${bodyPreview.slice(0, 400)}`,
   );
 }
@@ -959,7 +1185,7 @@ async function waitForAuthenticatedShell(
   log(`navigating to ${baseUrl}/ (auto-login path)`);
   await gotoCommitted(page, `${baseUrl}/`);
 
-  const homeLink = page.getByRole("link", { name: /^(Home|Chat)$/ });
+  const homeLink = page.getByRole("button", { name: /^New Chat$/i });
   const shellDeadline = Date.now() + shellTimeoutMs;
 
   while (Date.now() < shellDeadline) {
@@ -997,9 +1223,973 @@ async function waitForAuthenticatedShell(
   return sessionEmail;
 }
 
+const helloPrompt =
+  "Call the hello action with name AgentKit Browser, then report the greeting in streamed markdown.";
+const approvalPrompt =
+  "Call accept-agentkit-release with release agentkit-acceptance and wait for my approval.";
+const queuedPrompt =
+  "Queued follow-up: confirm production queue promotion in one sentence.";
+const rejectedSteerPrompt =
+  "Rejected steer: prove the queued message is restored before retry.";
+const secondMarkdownPrompt =
+  "Stream a second independent markdown response with a short checklist.";
+const suggestionPrompt =
+  "Summarize the accepted AgentKit release in one sentence.";
+const incompleteRetryPrompt =
+  "Fail this stream once, then recover cleanly when I retry.";
+const helloToolCallId = "call_agentkit_hello";
+const approvalToolCallId = "call_agentkit_approval";
+
+interface LoopbackRequestRecord {
+  prompt: string;
+  toolNames: string[];
+  toolResultIds: string[];
+}
+
+interface LoopbackProviderState {
+  requests: LoopbackRequestRecord[];
+  helloActionResults: string[];
+  approvalActionResults: string[];
+  markdownChunks: number;
+  queuedPromptSeen: boolean;
+  rejectedSteerPromptSeen: boolean;
+  suggestionPromptSeen: boolean;
+  incompleteAttempts: number;
+  errors: string[];
+}
+
+interface RunningLoopbackProvider {
+  baseUrl: string;
+  state: LoopbackProviderState;
+  close: () => Promise<void>;
+}
+
+function jsonRecord(value: unknown): Record<string, unknown> {
+  assert.ok(
+    value && typeof value === "object" && !Array.isArray(value),
+    "expected a JSON object",
+  );
+  return value as Record<string, unknown>;
+}
+
+function contentText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .map((part) => {
+      if (typeof part === "string") return part;
+      if (!part || typeof part !== "object") return "";
+      const record = part as Record<string, unknown>;
+      return typeof record.text === "string"
+        ? record.text
+        : typeof record.content === "string"
+          ? record.content
+          : "";
+    })
+    .join("");
+}
+
+async function readJsonBody(
+  request: IncomingMessage,
+): Promise<Record<string, unknown>> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of request) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    size += buffer.length;
+    assert.ok(size <= 1_000_000, "loopback provider request exceeded 1 MB");
+    chunks.push(buffer);
+  }
+  return jsonRecord(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+}
+
+function openAiChunk(
+  requestNumber: number,
+  delta: Record<string, unknown>,
+  finishReason: "stop" | "tool_calls" | null = null,
+): string {
+  return `data: ${JSON.stringify({
+    id: `chatcmpl-agentkit-${requestNumber}`,
+    object: "chat.completion.chunk",
+    created: 1_788_000_000,
+    model: "agentkit-loopback",
+    choices: [{ index: 0, delta, finish_reason: finishReason }],
+  })}\n\n`;
+}
+
+async function streamTextResponse(
+  response: ServerResponse,
+  requestNumber: number,
+  chunks: string[],
+  state: LoopbackProviderState,
+  delayMs = 80,
+): Promise<void> {
+  response.write(openAiChunk(requestNumber, { role: "assistant" }));
+  for (const chunk of chunks) {
+    response.write(openAiChunk(requestNumber, { content: chunk }));
+    state.markdownChunks += 1;
+    await sleep(delayMs);
+  }
+  response.write(openAiChunk(requestNumber, {}, "stop"));
+  response.end("data: [DONE]\n\n");
+}
+
+async function streamToolCallResponse(
+  response: ServerResponse,
+  requestNumber: number,
+  call: { id: string; name: string; arguments: Record<string, unknown> },
+): Promise<void> {
+  response.write(openAiChunk(requestNumber, { role: "assistant" }));
+  response.write(
+    openAiChunk(requestNumber, {
+      tool_calls: [
+        {
+          index: 0,
+          id: call.id,
+          type: "function",
+          function: {
+            name: call.name,
+            arguments: JSON.stringify(call.arguments),
+          },
+        },
+      ],
+    }),
+  );
+  response.write(openAiChunk(requestNumber, {}, "tool_calls"));
+  response.end("data: [DONE]\n\n");
+}
+
+function originalUserPrompt(value: string): string {
+  const frameworkSuffixes = [
+    "\n\n<current-time>",
+    "\n\n<current-screen>",
+    "\n\nContinue from where you left off",
+    "Approved. Go ahead and run the requested action.",
+  ];
+  const suffixIndexes = frameworkSuffixes
+    .map((suffix) => value.indexOf(suffix))
+    .filter((index) => index >= 0);
+  const end =
+    suffixIndexes.length > 0 ? Math.min(...suffixIndexes) : value.length;
+  return value.slice(0, end).trim();
+}
+
+async function handleLoopbackCompletion(
+  request: IncomingMessage,
+  response: ServerResponse,
+  state: LoopbackProviderState,
+): Promise<void> {
+  const body = await readJsonBody(request);
+  const messages = Array.isArray(body.messages)
+    ? body.messages.map((item) => jsonRecord(item))
+    : [];
+  const tools = Array.isArray(body.tools)
+    ? body.tools.map((item) => jsonRecord(item))
+    : [];
+  const userMessages = messages.filter((item) => item.role === "user");
+  const prompt = originalUserPrompt(contentText(userMessages.at(-1)?.content));
+  const toolNames = tools.flatMap((item) => {
+    const fn = item.function;
+    if (!fn || typeof fn !== "object") return [];
+    const name = (fn as Record<string, unknown>).name;
+    return typeof name === "string" ? [name] : [];
+  });
+  const toolResults = messages.filter((item) => item.role === "tool");
+  const toolResultIds = toolResults.flatMap((item) =>
+    typeof item.tool_call_id === "string" ? [item.tool_call_id] : [],
+  );
+  state.requests.push({ prompt, toolNames, toolResultIds });
+  const requestNumber = state.requests.length;
+  log(
+    `loopback request ${requestNumber}: prompt=${JSON.stringify(prompt)} tools=${toolNames.length} toolResults=${toolResultIds.length}`,
+  );
+
+  if (prompt === incompleteRetryPrompt) {
+    const attempt = state.incompleteAttempts++;
+    if (attempt === 0) {
+      response.writeHead(200, {
+        "cache-control": "no-cache",
+        connection: "keep-alive",
+        "content-type": "text/event-stream; charset=utf-8",
+      });
+      response.write(openAiChunk(requestNumber, { role: "assistant" }));
+      response.write(
+        openAiChunk(requestNumber, {
+          content: "**This partial response must not survive retry",
+        }),
+      );
+      await sleep(1_000);
+      response.destroy(new Error("Deterministic incomplete provider stream"));
+      return;
+    }
+    if (attempt === 1) {
+      response.writeHead(400, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          error: {
+            message: "Deterministic non-retryable provider rejection",
+            type: "invalid_request_error",
+          },
+        }),
+      );
+      return;
+    }
+  }
+
+  response.writeHead(200, {
+    "cache-control": "no-cache",
+    connection: "keep-alive",
+    "content-type": "text/event-stream; charset=utf-8",
+  });
+
+  if (prompt === helloPrompt) {
+    assert.ok(toolNames.includes("hello"), "generated app must expose hello");
+    const result = toolResults.find(
+      (item) => item.tool_call_id === helloToolCallId,
+    );
+    if (!result) {
+      await streamToolCallResponse(response, requestNumber, {
+        id: helloToolCallId,
+        name: "hello",
+        arguments: { name: "AgentKit Browser" },
+      });
+      return;
+    }
+    const text = contentText(result.content);
+    state.helloActionResults.push(text);
+    assert.match(text, /Hello, AgentKit Browser!/u);
+    await streamTextResponse(
+      response,
+      requestNumber,
+      [
+        "### Loopback complete\n\n**Hello, AgentKit Browser!",
+        "** streamed through AgentKit.",
+      ],
+      state,
+      1_000,
+    );
+    return;
+  }
+
+  if (prompt === approvalPrompt) {
+    assert.ok(
+      toolNames.includes("accept-agentkit-release"),
+      "generated app must expose the approval fixture action",
+    );
+    const result = toolResults.find(
+      (item) => item.tool_call_id === approvalToolCallId,
+    );
+    if (!result) {
+      await streamToolCallResponse(response, requestNumber, {
+        id: approvalToolCallId,
+        name: "accept-agentkit-release",
+        arguments: { release: "agentkit-acceptance" },
+      });
+      return;
+    }
+    const text = contentText(result.content);
+    state.approvalActionResults.push(text);
+    assert.match(text, /agentkit-acceptance/u);
+    await streamTextResponse(
+      response,
+      requestNumber,
+      ["**Approval continuation", " completed.**"],
+      state,
+    );
+    return;
+  }
+
+  if (prompt === queuedPrompt) {
+    state.queuedPromptSeen = true;
+    await streamTextResponse(
+      response,
+      requestNumber,
+      ["Queued follow-up completed ", "through the production queue."],
+      state,
+    );
+    return;
+  }
+
+  if (prompt === rejectedSteerPrompt) {
+    state.rejectedSteerPromptSeen = true;
+    await streamTextResponse(
+      response,
+      requestNumber,
+      ["Queue rollback preserved the exact prompt, ", "then steering retried."],
+      state,
+    );
+    return;
+  }
+
+  if (prompt === secondMarkdownPrompt) {
+    await streamTextResponse(
+      response,
+      requestNumber,
+      ["### Second response\n\n", "- independent\n", "- **buffered**"],
+      state,
+      120,
+    );
+    return;
+  }
+
+  if (prompt === suggestionPrompt) {
+    state.suggestionPromptSeen = true;
+    await streamTextResponse(
+      response,
+      requestNumber,
+      ["The AgentKit release is ready for focused framework review."],
+      state,
+    );
+    return;
+  }
+
+  if (prompt === incompleteRetryPrompt) {
+    await streamTextResponse(
+      response,
+      requestNumber,
+      ["**Recovered cleanly** ", "after the incomplete stream."],
+      state,
+    );
+    return;
+  }
+
+  throw new Error(`Unexpected loopback prompt: ${JSON.stringify(prompt)}`);
+}
+
+async function startLoopbackProvider(): Promise<RunningLoopbackProvider> {
+  const state: LoopbackProviderState = {
+    requests: [],
+    helloActionResults: [],
+    approvalActionResults: [],
+    markdownChunks: 0,
+    queuedPromptSeen: false,
+    rejectedSteerPromptSeen: false,
+    suggestionPromptSeen: false,
+    incompleteAttempts: 0,
+    errors: [],
+  };
+  const server = createServer((request, response) => {
+    const url = new URL(request.url ?? "/", "http://127.0.0.1");
+    if (request.method === "GET" && url.pathname === "/v1/models") {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          object: "list",
+          data: [{ id: "agentkit-loopback", object: "model" }],
+        }),
+      );
+      return;
+    }
+    if (request.method === "POST" && url.pathname === "/v1/chat/completions") {
+      void handleLoopbackCompletion(request, response, state).catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        state.errors.push(message);
+        if (!response.headersSent) {
+          response.writeHead(500, { "content-type": "application/json" });
+        }
+        response.end(JSON.stringify({ error: { message } }));
+      });
+      return;
+    }
+    const message = `Unexpected loopback request: ${request.method} ${url.pathname}`;
+    state.errors.push(message);
+    response.writeHead(404, { "content-type": "application/json" });
+    response.end(JSON.stringify({ error: { message } }));
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => resolve());
+  });
+  const address = server.address() as AddressInfo;
+  const baseUrl = `http://127.0.0.1:${address.port}/v1`;
+  log(`loopback provider listening at ${baseUrl}`);
+  return {
+    baseUrl,
+    state,
+    close: () =>
+      new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      ),
+  };
+}
+
+async function fillAndSubmitComposer(page: Page, text: string): Promise<void> {
+  const editor = page.locator('[data-agent-composer-slot="editor-input"]');
+  await editor.waitFor({ state: "visible" });
+  await editor.click();
+  await editor.fill(text);
+  await editor.press("Enter");
+  await page.waitForFunction(() => {
+    const editor = document.querySelector(
+      '[data-agent-composer-slot="editor-input"]',
+    );
+    return (editor?.textContent ?? "").trim() === "";
+  });
+}
+
+async function assertComposerFocused(page: Page): Promise<void> {
+  await page.waitForFunction(() => {
+    const active = document.activeElement;
+    return Boolean(
+      active?.matches('[data-agent-composer-slot="editor-input"]') ||
+      active?.closest('[data-agent-composer-slot="editor-input"]'),
+    );
+  });
+}
+
+async function waitForLoopbackState(
+  label: string,
+  predicate: () => boolean | Promise<boolean>,
+  timeoutMs = 15_000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await predicate()) return;
+    await sleep(25);
+  }
+  throw new Error(
+    `Loopback provider did not observe ${label} within ${timeoutMs}ms.`,
+  );
+}
+
+async function setDarkMode(page: Page, enabled: boolean): Promise<void> {
+  await page.evaluate((dark) => {
+    document.documentElement.classList.toggle("dark", dark);
+    document.documentElement.style.colorScheme = dark ? "dark" : "light";
+  }, enabled);
+}
+
+async function assertViewportContract(
+  page: Page,
+  label: string,
+  options: { dark: boolean },
+): Promise<void> {
+  const metrics = await page.evaluate(() => {
+    const transcript = document.querySelector<HTMLElement>(
+      ".agentkit-transcript",
+    );
+    const footer = document.querySelector<HTMLElement>(".agentkit-chat-footer");
+    const composer = document.querySelector<HTMLElement>(".agentkit-composer");
+    if (!transcript || !footer || !composer) return null;
+    const transcriptRect = transcript.getBoundingClientRect();
+    const footerRect = footer.getBoundingClientRect();
+    const composerStyle = getComputedStyle(composer);
+    const layoutGeometry: Array<Record<string, string | number | boolean>> = [];
+    for (const selector of [
+      ".agent-layout-shell",
+      ".agent-layout-main-surface",
+      ".agent-native-app-main",
+      ".agent-kit-chat-canvas-body",
+      ".agentkit-chat",
+      ".agentkit-chat-footer",
+      ".agentkit-composer-stack",
+      '[data-agent-composer-slot="area"]',
+      '[data-agent-composer-slot="root"]',
+      '[data-agent-composer-slot="toolbar"]',
+      '[data-agent-composer-slot="toolbar-spacer"]',
+    ]) {
+      const node = document.querySelector<HTMLElement>(selector);
+      if (!node) {
+        layoutGeometry.push({ selector, missing: true });
+        continue;
+      }
+      const rect = node.getBoundingClientRect();
+      const style = getComputedStyle(node);
+      layoutGeometry.push({
+        selector,
+        left: Math.round(rect.left),
+        right: Math.round(rect.right),
+        width: Math.round(rect.width),
+        minWidth: style.minWidth,
+        overflow: style.overflow,
+      });
+    }
+    return {
+      documentOverflow:
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth,
+      transcriptBottom: transcriptRect.bottom,
+      footerTop: footerRect.top,
+      footerBottom: footerRect.bottom,
+      viewportHeight: window.innerHeight,
+      composerBorder: composerStyle.borderColor,
+      composerShadow: composerStyle.boxShadow,
+      layoutGeometry,
+      controlGeometry: [
+        "plus-button",
+        "model-button",
+        "mode-button",
+        "voice-button",
+        "send-button",
+      ].map((slot) => {
+        const node = document.querySelector<HTMLElement>(
+          `[data-agent-composer-slot="${slot}"]`,
+        );
+        if (!node) return { slot, visible: false, missing: true };
+        const rect = node.getBoundingClientRect();
+        const style = getComputedStyle(node);
+        return {
+          slot,
+          visible:
+            style.display !== "none" &&
+            style.visibility !== "hidden" &&
+            rect.width > 0 &&
+            rect.left >= -1 &&
+            rect.right <= window.innerWidth + 1,
+          left: Math.round(rect.left),
+          right: Math.round(rect.right),
+          width: Math.round(rect.width),
+          display: style.display,
+          visibility: style.visibility,
+        };
+      }),
+    };
+  });
+  assert.ok(metrics, `${label}: required chat geometry must be rendered`);
+  assert.ok(
+    metrics.documentOverflow <= 1,
+    `${label}: horizontal overflow was ${metrics.documentOverflow}px`,
+  );
+  assert.ok(
+    metrics.transcriptBottom <= metrics.footerTop + 1,
+    `${label}: transcript must stop above the composer footer`,
+  );
+  assert.ok(
+    metrics.footerBottom <= metrics.viewportHeight + 1,
+    `${label}: composer footer must remain inside the viewport`,
+  );
+  const visibleControls = metrics.controlGeometry
+    .filter((control) => control.visible)
+    .map((control) => control.slot)
+    .sort();
+  assert.deepEqual(
+    visibleControls,
+    [
+      "mode-button",
+      "model-button",
+      "plus-button",
+      "send-button",
+      "voice-button",
+    ],
+    `${label}: every composer control must remain reachable (${JSON.stringify({ controls: metrics.controlGeometry, layout: metrics.layoutGeometry })})`,
+  );
+  if (options.dark) {
+    const lightChannel =
+      /rgba?\(\s*(?:1[6-9]\d|2\d\d)\s*,\s*(?:1[6-9]\d|2\d\d)\s*,\s*(?:1[6-9]\d|2\d\d)/u;
+    assert.doesNotMatch(
+      metrics.composerShadow,
+      lightChannel,
+      `${label}: dark elevation must not use a light shadow`,
+    );
+    assert.doesNotMatch(
+      metrics.composerBorder,
+      lightChannel,
+      `${label}: dark composer border must not render a light rim`,
+    );
+  }
+}
+
+async function readPersistedFeedback(
+  page: Page,
+): Promise<Array<Record<string, unknown>>> {
+  return page.evaluate(async () => {
+    const response = await fetch(
+      "/_agent-native/observability/feedback?feedbackType=thumbs_up&limit=50",
+    );
+    if (!response.ok) {
+      throw new Error(`feedback read failed with ${response.status}`);
+    }
+    const payload: unknown = await response.json();
+    if (!Array.isArray(payload)) {
+      throw new Error("feedback read did not return an array");
+    }
+    return payload as Array<Record<string, unknown>>;
+  });
+}
+
+async function assertAgentKitChatAcceptance(
+  page: Page,
+  provider: LoopbackProviderState,
+  network: BrowserNetworkState,
+): Promise<void> {
+  const chat = page.locator("section.agentkit-chat");
+  const transcript = page.locator(".agentkit-transcript");
+  const footer = page.locator(".agentkit-chat-footer");
+  const composer = page.locator(
+    '.agentkit-composer[data-agent-composer-slot="root"]',
+  );
+
+  await chat.waitFor({ state: "visible" });
+  assert.equal(await chat.getAttribute("data-empty"), "true");
+  assert.equal(await page.locator(".agentkit-chat-header").count(), 0);
+  await transcript.waitFor({ state: "visible" });
+  await footer.waitFor({ state: "visible" });
+  await composer.waitFor({ state: "visible" });
+  assert.equal(
+    await page.locator(".agentkit-suggestions").count(),
+    0,
+    "suggestions must not render before the agent publishes them",
+  );
+
+  for (const slot of [
+    "editor-input",
+    "toolbar",
+    "plus-button",
+    "model-button",
+    "mode-button",
+    "voice-button",
+    "send-button",
+  ]) {
+    await page
+      .locator(`[data-agent-composer-slot="${slot}"]`)
+      .waitFor({ state: "visible" });
+  }
+
+  const chatBox = await chat.boundingBox();
+  const composerBox = await composer.boundingBox();
+  assert.ok(chatBox && composerBox, "chat and composer require layout boxes");
+  assert.ok(
+    composerBox.width >= 480,
+    `new-chat composer must retain its full layout (${composerBox.width}px)`,
+  );
+  assert.ok(
+    composerBox.x > chatBox.x &&
+      composerBox.x + composerBox.width < chatBox.x + chatBox.width,
+    "new-chat composer must remain centered inside the chat canvas",
+  );
+  await setDarkMode(page, false);
+  await assertViewportContract(page, "desktop light empty chat", {
+    dark: false,
+  });
+
+  await fillAndSubmitComposer(page, helloPrompt);
+  await page.waitForURL(/\/chat\/chat-/);
+  network.allowInitialEphemeralThread404 = false;
+  const threadUrl = page.url();
+  const threadPath = new URL(threadUrl).pathname;
+  await page
+    .getByRole("heading", { name: "Loopback complete" })
+    .waitFor({ state: "visible" });
+  await page
+    .locator(".agentkit-message-content")
+    .filter({ hasText: "Hello, AgentKit Browser!" })
+    .waitFor({ state: "visible" });
+  assert.equal(
+    await page
+      .locator(".agentkit-message-content strong")
+      .filter({ hasText: "Hello, AgentKit Browser!" })
+      .count(),
+    0,
+    "partial markdown must render without prematurely completing bold syntax",
+  );
+  await page
+    .locator(".agentkit-message-content strong")
+    .filter({ hasText: "Hello, AgentKit Browser!" })
+    .waitFor({ state: "visible" });
+  const suggestion = page.getByRole("button", {
+    name: "Summarize this release",
+  });
+  await suggestion.waitFor({ state: "visible" });
+  await assertComposerFocused(page);
+  const helloActivity = page.locator(".agentkit-activities-summary").first();
+  await helloActivity.waitFor({ state: "visible" });
+  assert.match(
+    (await helloActivity.textContent()) ?? "",
+    /\+\d+|\d+/u,
+    "collapsed activity must summarize additional work without listing every tool",
+  );
+  await helloActivity.click();
+  await page
+    .locator(".agentkit-activity-label")
+    .filter({ hasText: /^Hello$/u })
+    .waitFor({ state: "visible" });
+  await waitForLoopbackState(
+    "the real hello action result",
+    () => provider.helloActionResults.length === 1,
+  );
+  assert.equal(
+    new URL(page.url()).pathname,
+    threadPath,
+    "stream completion must preserve the active thread route",
+  );
+
+  const helloMessage = page
+    .locator('.agentkit-message[data-role="assistant"]')
+    .filter({ hasText: "Hello, AgentKit Browser!" });
+  const helloMatches = await helloMessage.evaluateAll((messages) =>
+    messages.map((message) => ({
+      id: message.getAttribute("data-message-id"),
+      text: message.textContent,
+    })),
+  );
+  assert.equal(
+    helloMatches.length,
+    1,
+    `stream reconciliation must leave one assistant response: ${JSON.stringify(helloMatches)}`,
+  );
+  await helloMessage.hover();
+  await helloMessage
+    .getByRole("button", { name: "Helpful", exact: true })
+    .click();
+  await waitForLoopbackState(
+    "persisted thumbs-up feedback",
+    async () => (await readPersistedFeedback(page)).length > 0,
+  );
+
+  await suggestion.click();
+  await waitForLoopbackState(
+    "agent-authored suggestion submission",
+    () => provider.suggestionPromptSeen,
+  );
+  await page
+    .getByText("The AgentKit release is ready for focused framework review.", {
+      exact: true,
+    })
+    .waitFor({ state: "visible" });
+  await assertComposerFocused(page);
+
+  await helloMessage.getByRole("button", { name: "Fork conversation" }).click();
+  await Promise.race([
+    page.waitForURL(
+      (url) => url.pathname !== threadPath && url.pathname.startsWith("/chat/"),
+    ),
+    page
+      .locator(".agentkit-command-error")
+      .waitFor({ state: "visible" })
+      .then(async () => {
+        throw new Error(
+          `Fork failed in the rendered AgentKit action: ${await page.locator(".agentkit-command-error").innerText()}`,
+        );
+      }),
+  ]);
+  const forkPath = new URL(page.url()).pathname;
+  assert.notEqual(forkPath, threadPath, "fork must navigate to a new thread");
+  await page.goto(threadUrl, { waitUntil: "domcontentloaded" });
+  await composer.waitFor({ state: "visible" });
+
+  await fillAndSubmitComposer(page, secondMarkdownPrompt);
+  await page
+    .getByRole("heading", { name: "Second response" })
+    .waitFor({ state: "visible" });
+  assert.equal(
+    await page
+      .locator(".agentkit-message-content strong")
+      .filter({ hasText: "buffered" })
+      .count(),
+    0,
+    "the second response must expose an independently buffered intermediate state",
+  );
+  await page
+    .locator(".agentkit-message-content strong")
+    .filter({ hasText: "buffered" })
+    .waitFor({ state: "visible" });
+  await page
+    .locator(".agentkit-message-content strong")
+    .filter({ hasText: "Hello, AgentKit Browser!" })
+    .waitFor({ state: "visible" });
+
+  await setDarkMode(page, true);
+  await assertViewportContract(page, "desktop dark conversation", {
+    dark: true,
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await assertViewportContract(page, "narrow dark conversation", {
+    dark: true,
+  });
+
+  await fillAndSubmitComposer(page, approvalPrompt);
+  const approval = page.locator(".agentkit-approval");
+  await approval.waitFor({ state: "visible" });
+  await approval.getByRole("button", { name: "Approve" }).waitFor({
+    state: "visible",
+  });
+  await assertViewportContract(page, "narrow dark approval", { dark: true });
+  await assertComposerFocused(page);
+
+  await fillAndSubmitComposer(page, queuedPrompt);
+  const queue = page.getByRole("region", { name: "Queued messages" });
+  await queue.waitFor({ state: "visible" });
+  await queue.getByText(queuedPrompt, { exact: true }).waitFor({
+    state: "visible",
+  });
+  await assertViewportContract(page, "narrow dark queue", { dark: true });
+  await assertComposerFocused(page);
+
+  await approval.getByRole("button", { name: "Approve" }).click();
+  await page
+    .locator(".agentkit-message-content strong")
+    .filter({ hasText: "Approval continuation completed." })
+    .waitFor({ state: "visible" });
+  await approval.waitFor({ state: "detached" });
+  await page
+    .getByText("Queued follow-up completed through the production queue.", {
+      exact: true,
+    })
+    .waitFor({ state: "visible" });
+  await queue.waitFor({ state: "hidden" });
+  await assertComposerFocused(page);
+  await waitForLoopbackState(
+    "approval action continuation",
+    () => provider.approvalActionResults.length === 1,
+  );
+  await waitForLoopbackState(
+    "automatic queue promotion",
+    () => provider.queuedPromptSeen,
+  );
+  assert.equal(
+    new URL(page.url()).pathname,
+    threadPath,
+    "approval and queue continuation must preserve the active thread route",
+  );
+
+  network.allowExpectedIncompleteStreamFailure = true;
+  await fillAndSubmitComposer(page, incompleteRetryPrompt);
+  await page
+    .getByText("This partial response must not survive retry", { exact: false })
+    .waitFor({ state: "visible" });
+  await fillAndSubmitComposer(page, rejectedSteerPrompt);
+  await queue.getByText(rejectedSteerPrompt, { exact: true }).waitFor({
+    state: "visible",
+  });
+  await page.locator(".agentkit-run-failure").waitFor({ state: "visible" });
+  network.allowExpectedIncompleteStreamFailure = false;
+  await approval.waitFor({ state: "detached" });
+  await queue
+    .getByRole("button", { name: /Steer/u })
+    .waitFor({ state: "visible" });
+  const steer = queue.getByRole("button", { name: /Steer/u });
+  await steer.click();
+  await page
+    .getByRole("alert")
+    .filter({ hasText: "Deterministic queue steering rejection" })
+    .waitFor({ state: "visible" });
+  await queue.getByText(rejectedSteerPrompt, { exact: true }).waitFor({
+    state: "visible",
+  });
+  assert.equal(
+    provider.rejectedSteerPromptSeen,
+    false,
+    "rejected steering must not submit the prompt to the provider",
+  );
+
+  await steer.click();
+  await waitForLoopbackState(
+    "the exact manually steered prompt",
+    () => provider.rejectedSteerPromptSeen,
+  );
+  assert.equal(
+    provider.requests.filter(
+      (request) => request.prompt === rejectedSteerPrompt,
+    ).length,
+    1,
+    "manual steering must submit the exact queued prompt once after rollback",
+  );
+  await page
+    .getByText(
+      "Queue rollback preserved the exact prompt, then steering retried.",
+      { exact: true },
+    )
+    .waitFor({ state: "visible" });
+  await queue.getByText(rejectedSteerPrompt, { exact: true }).waitFor({
+    state: "detached",
+  });
+
+  await fillAndSubmitComposer(page, incompleteRetryPrompt);
+  await page
+    .locator(".agentkit-message-content strong")
+    .filter({ hasText: "Recovered cleanly" })
+    .waitFor({ state: "visible" });
+  assert.equal(
+    provider.incompleteAttempts,
+    3,
+    "the incomplete stream must be retried exactly once without reload",
+  );
+  assert.equal(
+    await page.locator(".agentkit-approval").count(),
+    0,
+    "recovery must not leave stale human-review state",
+  );
+  assert.equal(
+    await queue.getByText(rejectedSteerPrompt, { exact: true }).count(),
+    0,
+    "recovery must not leave the promoted queue item behind",
+  );
+  await assertComposerFocused(page);
+
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await setDarkMode(page, false);
+
+  const transcriptBox = await transcript.boundingBox();
+  const footerBox = await footer.boundingBox();
+  assert.ok(
+    transcriptBox && footerBox,
+    "transcript and composer footer require layout boxes",
+  );
+  assert.ok(
+    transcriptBox.y + transcriptBox.height <= footerBox.y + 1,
+    "the transcript scroll region must stop above the composer footer",
+  );
+  assert.ok(
+    (await page
+      .locator('.agentkit-message-content [data-format="markdown"]')
+      .count()) >= 3,
+    "streamed assistant messages must retain rich markdown parts",
+  );
+
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await chat.waitFor({ state: "visible" });
+  await composer.waitFor({ state: "visible" });
+  assert.equal(
+    new URL(page.url()).pathname,
+    threadPath,
+    "reload must preserve the active thread route",
+  );
+  await page
+    .getByRole("heading", { name: "Loopback complete" })
+    .waitFor({ state: "visible" });
+  assert.ok(
+    (await readPersistedFeedback(page)).some(
+      (entry) => entry.threadId === threadPath.slice("/chat/".length),
+    ),
+    "thumbs-up feedback must remain persisted after reload",
+  );
+  await page
+    .locator(".agentkit-message-content strong")
+    .filter({ hasText: "Hello, AgentKit Browser!" })
+    .waitFor({ state: "visible" });
+  await page
+    .locator(".agentkit-message-content strong")
+    .filter({ hasText: "Approval continuation completed." })
+    .waitFor({ state: "visible" });
+  await page
+    .getByText("Queued follow-up completed through the production queue.", {
+      exact: true,
+    })
+    .waitFor({ state: "visible" });
+  assert.ok(
+    (await page
+      .locator('.agentkit-message-content [data-format="markdown"]')
+      .count()) >= 3,
+    "reload must reconstruct rich markdown history from production persistence",
+  );
+  await assertComposerFocused(page);
+  await assertViewportContract(page, "desktop light persisted conversation", {
+    dark: false,
+  });
+
+  fs.mkdirSync(path.join(repoRoot, ".tmp"), { recursive: true });
+  await page.screenshot({
+    path: path.join(repoRoot, ".tmp", "agentkit-chat-acceptance.png"),
+    fullPage: false,
+  });
+}
+
 async function runBrowserSmoke(
   page: Page,
   running: RunningDev,
+  provider: LoopbackProviderState,
+  network: BrowserNetworkState,
   browserErrors: string[],
   httpErrors: string[],
 ): Promise<void> {
@@ -1036,6 +2226,25 @@ async function runBrowserSmoke(
   log("assertion pass: / (Chat surface) after /agent");
   await gotoAndWaitForChatPage(page, running, "/", browserErrors, httpErrors);
 
+  log("acceptance: real AgentKit loopback lifecycle");
+  await assertAgentKitChatAcceptance(page, provider, network);
+  log("acceptance pass: real AgentKit loopback lifecycle");
+  assert.ok(
+    provider.requests.length >= 10,
+    "acceptance must exercise tools, rich streaming, suggestions, approval, queue promotion, steering, and recovery",
+  );
+  assert.equal(provider.helloActionResults.length, 1);
+  assert.equal(provider.approvalActionResults.length, 1);
+  assert.ok(
+    provider.markdownChunks >= 7,
+    "loopback provider must stream multiple markdown chunks per response",
+  );
+  assert.equal(provider.queuedPromptSeen, true);
+  assert.equal(provider.rejectedSteerPromptSeen, true);
+  assert.equal(provider.suggestionPromptSeen, true);
+  assert.equal(provider.incompleteAttempts, 3);
+  assert.deepEqual(provider.errors, [], "loopback provider runtime errors");
+
   assert.deepEqual(browserErrors, [], "browser console/page errors on Chat");
   assert.deepEqual(httpErrors, [], "browser HTTP errors on Chat");
 }
@@ -1054,6 +2263,23 @@ function assertCleanServerLogs(logs: string[]): void {
   }
   if (hasAuthLockFailure(logs))
     offenders.push("auth init failure (app locked)");
+  const exceptionLines = text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) =>
+      /(?:^|\s)(?:Error|Exception|TypeError|ReferenceError|SyntaxError):|UnhandledPromiseRejection|\bHTTP 5\d\d\b/u.test(
+        line,
+      ),
+    )
+    .filter(
+      (line) =>
+        !line.includes(nitroUnavailableConsoleLine) &&
+        !line.includes("Deterministic incomplete provider stream") &&
+        !line.includes("Vite environment") &&
+        !line.includes("optimized dependencies changed"),
+    );
+  offenders.push(...exceptionLines.slice(0, 12));
   assert.deepEqual(
     offenders,
     [],
@@ -1064,7 +2290,9 @@ function assertCleanServerLogs(logs: string[]): void {
 async function main(): Promise<void> {
   if (!skipScaffold) {
     scaffoldStandaloneChat();
-    installApp();
+    installApprovalActionFixture();
+    installAcceptanceTransportFixture();
+    await installApp();
     assertStandalonePackageJson();
   } else {
     assert.equal(
@@ -1072,14 +2300,28 @@ async function main(): Promise<void> {
       true,
       `STANDALONE_CHAT_DEV_SMOKE_SKIP_CREATE=1 requires ${appDir}/package.json`,
     );
+    installApprovalActionFixture();
+    installAcceptanceTransportFixture();
   }
 
-  const running = await startDev();
+  const provider = await startLoopbackProvider();
+  let running: RunningDev;
+  try {
+    running = await startDev(provider.baseUrl);
+  } catch (error) {
+    await provider.close();
+    throw error;
+  }
   let browser: Browser | null = null;
   let primaryError: Error | null = null;
   let cleanupError: unknown;
   const browserErrors: string[] = [];
   const httpErrors: string[] = [];
+  const network: BrowserNetworkState = {
+    allowInitialEphemeralThread404: true,
+    allowExpectedIncompleteStreamFailure: false,
+    navigationCancellationUntil: 0,
+  };
 
   const captureCleanupError = (error: unknown) => {
     const message =
@@ -1095,8 +2337,15 @@ async function main(): Promise<void> {
     browser = await launchBrowser();
     const context = await browser.newContext({
       viewport: { width: 1280, height: 900 },
+      permissions: ["microphone"],
     });
     const page = await context.newPage();
+
+    page.on("framenavigated", (frame) => {
+      if (frame === page.mainFrame()) {
+        network.navigationCancellationUntil = Date.now() + 2_000;
+      }
+    });
 
     page.on("pageerror", (error) => browserErrors.push(error.message));
     page.on("console", (message) => {
@@ -1108,19 +2357,61 @@ async function main(): Promise<void> {
       }
       browserErrors.push(text);
     });
+    page.on("requestfailed", (request) => {
+      const url = request.url();
+      if (!url.startsWith(running.baseUrl)) return;
+      if (
+        new URL(url).pathname === "/_agent-native/events" &&
+        request.method() === "GET" &&
+        request.failure()?.errorText === "net::ERR_ABORTED"
+      ) {
+        recordSuppressedNoise(
+          `expected event-stream cancellation ${request.method()} ${url}`,
+        );
+        return;
+      }
+      if (
+        request.failure()?.errorText === "net::ERR_ABORTED" &&
+        Date.now() <= network.navigationCancellationUntil
+      ) {
+        recordSuppressedNoise(
+          `expected navigation cancellation ${request.method()} ${url}`,
+        );
+        return;
+      }
+      if (
+        network.allowExpectedIncompleteStreamFailure &&
+        url.includes("/_agent-native/agent-chat")
+      ) {
+        recordSuppressedNoise(
+          `expected requestfailed ${request.method()} ${url}: ${request.failure()?.errorText ?? "unknown failure"}`,
+        );
+        return;
+      }
+      httpErrors.push(
+        `requestfailed ${request.method()} ${url}: ${request.failure()?.errorText ?? "unknown failure"}`,
+      );
+    });
     page.on("response", (response) => {
       const status = response.status();
       if (status < 400) return;
       const url = response.url();
       if (!url.startsWith(running.baseUrl)) return;
-      if (isBenignHttpError(status, url)) {
+      if (isBenignHttpError(status, url, network)) {
         recordSuppressedNoise(`${status} ${url}`);
         return;
       }
       httpErrors.push(`${status} ${url}`);
     });
 
-    await runBrowserSmoke(page, running, browserErrors, httpErrors);
+    await runBrowserSmoke(
+      page,
+      running,
+      provider.state,
+      network,
+      browserErrors,
+      httpErrors,
+    );
     assertCleanServerLogs(running.logs);
 
     console.log("qa-standalone-chat-dev-smoke: clean");
@@ -1134,6 +2425,9 @@ async function main(): Promise<void> {
     );
     console.log("  checked:  no Nitro startup noise or SSR errors in dev logs");
     console.log("  checked:  no browser console/page errors after warmup");
+    console.log(
+      "  checked:  no-spend loopback → hello action → HITL → queue → rich reload",
+    );
   } catch (err) {
     const logs = running.logs.slice(-160).join("");
     const message =
@@ -1146,8 +2440,13 @@ async function main(): Promise<void> {
       httpErrors.length > 0
         ? `\n\nBrowser HTTP errors:\n${httpErrors.join("\n")}`
         : "";
+    const providerBlock = `\n\nLoopback provider state:\n${JSON.stringify(
+      provider.state,
+      null,
+      2,
+    )}`;
     primaryError = new Error(
-      `${message}${browserBlock}${httpBlock}\n\nRecent dev logs:\n${logs}`,
+      `${message}${browserBlock}${httpBlock}${providerBlock}\n\nRecent dev logs:\n${logs}`,
     );
   } finally {
     try {
@@ -1157,6 +2456,11 @@ async function main(): Promise<void> {
     }
     try {
       await stopDev(running);
+    } catch (error) {
+      captureCleanupError(error);
+    }
+    try {
+      await provider.close();
     } catch (error) {
       captureCleanupError(error);
     }

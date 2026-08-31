@@ -167,6 +167,7 @@ export function VoiceButton({ voice, isMac, disabled }: VoiceButtonProps) {
       <TooltipTrigger asChild>
         <button
           type="button"
+          data-agent-composer-slot="voice-button"
           onClick={onClick}
           disabled={disabled || transcribing}
           aria-label={label}

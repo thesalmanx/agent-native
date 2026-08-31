@@ -185,6 +185,7 @@ export function RealtimeVoiceModeEntry({
             <Button
               ref={setTriggerNode}
               type="button"
+              data-agent-composer-slot="voice-button"
               variant="ghost"
               size="icon"
               disabled={disabled}

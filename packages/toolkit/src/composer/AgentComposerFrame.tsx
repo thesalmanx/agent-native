@@ -54,7 +54,7 @@ export function AgentComposerFrame({
         data-agent-composer-variant={layoutVariant}
         data-agent-composer-slot="root"
         className={cn(
-          "agent-composer-root flex flex-col rounded-lg border border-input bg-muted/45 transition-colors focus-within:border-ring",
+          "agent-composer-root flex flex-col rounded-lg border border-input bg-muted/45 transition-colors",
           layoutVariant !== "default" &&
             `agent-composer-root--${layoutVariant}`,
           rootClassName,

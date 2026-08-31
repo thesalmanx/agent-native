@@ -573,8 +573,6 @@
   margin-top: 0;
 }
 
-/* Compact Codex-style reading rhythm: keep the renderer's rich content
-   treatment, but let the conversation carry more information per viewport. */
 .agent-markdown {
   line-height: 1.5;
 }
@@ -789,7 +787,6 @@
   }
 }
 
-/* Tool-code viewer that uses shiki inside the Codex-style gray box. */
 .agent-tool-code .agent-markdown-shiki {
   margin: 0;
   border-radius: 0;

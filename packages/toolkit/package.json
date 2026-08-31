@@ -131,6 +131,13 @@
       "import": "./dist/canvas-interactions/*.js",
       "default": "./dist/canvas-interactions/*.js"
     },
+    "./clipboard": {
+      "types": "./dist/clipboard.d.ts",
+      "browser": "./dist/clipboard.js",
+      "development": "./dist/clipboard.js",
+      "import": "./dist/clipboard.js",
+      "default": "./dist/clipboard.js"
+    },
     "./composer": {
       "types": "./dist/composer/index.d.ts",
       "browser": "./dist/composer/index.js",
@@ -289,6 +296,8 @@
   },
   "dependencies": {
     "@assistant-ui/react": "catalog:",
+    "@assistant-ui/store": "catalog:",
+    "@assistant-ui/tap": "catalog:",
     "@radix-ui/react-accordion": "^1.2.15",
     "@radix-ui/react-alert-dialog": "^1.1.18",
     "@radix-ui/react-aspect-ratio": "^1.1.11",

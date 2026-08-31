@@ -20,7 +20,20 @@ describe("agent-native shell surface tokens", () => {
     expect(tokens).toContain("--agent-kit-conversation-max-width:");
     expect(tokens).toContain("--agent-kit-density-font-size:");
     expect(tokens).toContain("--agent-kit-composer-radius:");
+    expect(tokens).toContain("--agent-kit-composer-toolbar-control-size:");
+    expect(tokens).toContain("--agent-kit-composer-toolbar-control-font-size:");
+    expect(tokens).toContain(
+      "--agent-kit-composer-toolbar-control-line-height:",
+    );
+    expect(tokens).toContain(
+      "--agent-kit-composer-toolbar-control-font-weight:",
+    );
     expect(tokens).toContain("--agent-kit-positive:");
+    expect(tokens).toContain("--agent-kit-subtle-surface:");
+    expect(tokens).toContain("--agent-kit-popover-surface:");
+    expect(tokens).toContain("--agent-kit-text:");
+    expect(tokens).toContain("--agent-kit-muted-text:");
+    expect(tokens).toContain("--agent-kit-border:");
   });
 
   it("keeps AgentKit activity components on semantic roles", () => {

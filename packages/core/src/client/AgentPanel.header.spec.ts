@@ -154,9 +154,6 @@ describe("AgentPanel header tab visibility", () => {
         0,
       ),
     ).toBe(true);
-    expect(
-      shouldShowAgentPanelPageHeader([chatTab("main")], "main", 0, true),
-    ).toBe(true);
   });
 
   it("keeps new chat out of the page canvas header by default", () => {

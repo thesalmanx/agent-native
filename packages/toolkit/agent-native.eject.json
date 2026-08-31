@@ -100,6 +100,18 @@
       "verification": ["pnpm typecheck"]
     },
     {
+      "id": "toolkit/clipboard",
+      "label": "Clipboard helper",
+      "catalog": "toolkit-ui",
+      "catalogItems": ["clipboard"],
+      "entrypoints": ["./clipboard"],
+      "strategy": "source-copy",
+      "sourceEntries": ["src/clipboard.ts"],
+      "targetRoot": "app/components/agent-native/toolkit",
+      "dependencies": [],
+      "verification": ["pnpm typecheck"]
+    },
+    {
       "id": "toolkit/collab-ui",
       "label": "Collaboration UI",
       "catalog": "toolkit-ui",
@@ -199,7 +211,9 @@
       "targetRoot": "app/components/agent-native/toolkit",
       "dependencies": [
         "@assistant-ui/react",
+        "@radix-ui/react-dropdown-menu",
         "@radix-ui/react-popover",
+        "@radix-ui/react-slot",
         "@radix-ui/react-switch",
         "@radix-ui/react-tooltip",
         "@tabler/icons-react",
@@ -208,7 +222,9 @@
         "@tiptap/pm",
         "@tiptap/react",
         "@tiptap/starter-kit",
+        "class-variance-authority",
         "clsx",
+        "culori",
         "react",
         "react-dom",
         "sonner",

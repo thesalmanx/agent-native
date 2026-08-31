@@ -90,30 +90,6 @@ describe("shouldShowAssistantChatSuggestions", () => {
   });
 });
 
-describe("AgentKit demo composition", () => {
-  it("keeps rich demo content inside the live chat shell", () => {
-    const panelSource = readFileSync("src/client/AgentPanel.tsx", {
-      encoding: "utf8",
-    });
-    const activityDemoSource = readFileSync(
-      "src/client/chat/agent-activity-trace-demo.tsx",
-      { encoding: "utf8" },
-    );
-    const approvalDemoSource = readFileSync(
-      "src/client/chat/agent-approval-card-demo.tsx",
-      { encoding: "utf8" },
-    );
-
-    expect(panelSource).toContain("threadContentSlot={");
-    expect(panelSource).toContain("<MultiTabAssistantChatLazy");
-    expect(panelSource).toContain(
-      "[data-agent-fullscreen='true'] [data-agent-suggestion-bar='true']",
-    );
-    expect(activityDemoSource).not.toContain("Try another request");
-    expect(approvalDemoSource).not.toContain("Try another request");
-  });
-});
-
 describe("page composer geometry", () => {
   it("keeps the focused hero composer subtle and multiline content inset", () => {
     const styles = readFileSync("src/styles/agent-native.css", "utf8");

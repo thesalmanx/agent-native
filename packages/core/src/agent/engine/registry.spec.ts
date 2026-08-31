@@ -2515,6 +2515,37 @@ describe("AgentEngine registry", () => {
       expect(resolved).toBe(openAiEngine);
     });
 
+    it("allows an operator-provided private OpenAI-compatible endpoint", async () => {
+      process.env.OPENAI_API_KEY = "sk-operator-test"; // guard:allow-env-credential — verifies operator-owned endpoint classification
+      process.env.OPENAI_BASE_URL = "http://127.0.0.1:43123/v1"; // guard:allow-env-credential — loopback proves the private-endpoint allowance stays deploy-scoped
+
+      const { registerAgentEngine, resolveEngine } =
+        await import("./registry.js");
+
+      const openAiEngine = { name: "ai-sdk:openai", stream: vi.fn() } as any;
+      const openAiCreate = vi.fn().mockReturnValue(openAiEngine);
+
+      registerAgentEngine({
+        name: "ai-sdk:openai",
+        label: "OpenAI",
+        description: "",
+        capabilities: {} as any,
+        defaultModel: "gpt-5.4",
+        supportedModels: [],
+        requiredEnvVars: ["OPENAI_API_KEY"],
+        create: openAiCreate,
+      });
+
+      const resolved = await resolveEngine({ engineOption: "ai-sdk:openai" });
+
+      expect(openAiCreate).toHaveBeenCalledWith({
+        apiKey: undefined,
+        allowEnvFallback: true,
+        baseUrl: "http://127.0.0.1:43123/v1",
+      });
+      expect(resolved).toBe(openAiEngine);
+    });
+
     it("does not replace an unreadable endpoint with deploy configuration", async () => {
       vi.doMock("../../server/credential-provider.js", () => ({
         assertCredentialStoreReadable: vi.fn(),

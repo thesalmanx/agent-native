@@ -295,6 +295,10 @@ export {
 export * from "../chat/connectors.js";
 export * from "../chat/runtime.js";
 export {
+  createAgentNativeAgentKitTransport,
+  type CreateAgentNativeAgentKitTransportOptions,
+} from "../chat/agentkit-agent-native.js";
+export {
   CHAT_FIRST_APP_LAYOUT_STORAGE_KEY,
   CHAT_FIRST_DEFAULT_APP_IDS,
   CHAT_FIRST_SURFACE_TABS_STORAGE_KEY,

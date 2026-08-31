@@ -156,4 +156,27 @@ describe("MessageQueueDrawer", () => {
       "0px",
     );
   });
+
+  it("disables every queue mutation while the host command is pending", () => {
+    act(() => {
+      root.render(
+        <MessageQueueDrawer
+          disabled
+          items={items.slice(0, 1)}
+          labels={labels}
+          onSteer={() => undefined}
+          onRemove={() => undefined}
+          getItemActions={() => [
+            { id: "move", label: "Move", onSelect: () => undefined },
+          ]}
+        />,
+      );
+    });
+
+    expect(
+      Array.from(container.querySelectorAll("button")).every(
+        (button) => button.disabled,
+      ),
+    ).toBe(true);
+  });
 });

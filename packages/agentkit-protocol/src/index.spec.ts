@@ -91,11 +91,15 @@ describe("AgentKit protocol composition", () => {
       type: "approval.resolved",
       approvalId: "approval-1",
       response: {
+        decision: "approve",
         optionIds: ["keep"],
+        other: "Keep it, but add a summary",
         input: { note: "Ship it" },
       },
     };
 
+    expect(event.response.decision).toBe("approve");
     expect(event.response?.optionIds).toEqual(["keep"]);
+    expect(event.response.other).toBe("Keep it, but add a summary");
   });
 });

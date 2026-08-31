@@ -103,6 +103,15 @@ export {
 } from "./message-components.js";
 export * from "./runtime.js";
 export {
+  createAgentKitProtocolAdapter,
+  type AgentKitProtocolAdapter,
+  type CreateAgentKitProtocolAdapterOptions,
+} from "./agentkit-protocol.js";
+export {
+  createAgentNativeAgentKitTransport,
+  type CreateAgentNativeAgentKitTransportOptions,
+} from "./agentkit-agent-native.js";
+export {
   sendToAgentChat,
   sendToAgentChatAndConfirm,
   reportAgentChatSubmitResult,

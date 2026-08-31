@@ -60,8 +60,6 @@ import {
   type HostedHarnessRuntime,
 } from "../agent/harness/hosted.js";
 import type { AgentRun } from "../progress/types.js";
-import { AgentActivityTraceDemo } from "./chat/agent-activity-trace-demo.js";
-import { AgentApprovalCardDemo } from "./chat/agent-approval-card-demo.js";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -576,9 +574,7 @@ export function shouldShowAgentPanelPageHeader(
   tabs: MultiTabAssistantChatHeaderProps["tabs"],
   activeTabId: string,
   activeTabMessageCount: number,
-  hasInjectedContent = false,
 ) {
-  if (hasInjectedContent) return true;
   if (!activeTabId) return false;
   if (activeTabMessageCount > 0) return true;
 
@@ -1001,16 +997,6 @@ function AgentPanelInner({
   const t = useT();
   const navigate = useNavigate();
   const location = useLocation();
-  const showActivityDemo =
-    typeof window !== "undefined" &&
-    (window.location.hostname === "localhost" ||
-      window.location.hostname === "127.0.0.1") &&
-    new URLSearchParams(location.search).get("agent-demo") === "complex";
-  const showApprovalDemo =
-    typeof window !== "undefined" &&
-    (window.location.hostname === "localhost" ||
-      window.location.hostname === "127.0.0.1") &&
-    new URLSearchParams(location.search).get("agent-demo") === "approval";
   const mounted = useClientOnly();
   const onboardingPreviewMode = useOnboardingPreviewMode();
   const firstRunOnboardingGateOwnsSurface =
@@ -1879,7 +1865,6 @@ function AgentPanelInner({
         tabs,
         activeTabId,
         activeTabMessageCount,
-        showActivityDemo || showApprovalDemo,
       );
       const canShareActiveTab =
         activeTab && (activeTabMessageCount > 0 || activeTab.status !== "idle");
@@ -1990,8 +1975,6 @@ function AgentPanelInner({
       onPageHeaderVisibilityChange,
       pageHeaderLeadingSlot,
       pageToolbarSlot,
-      showActivityDemo,
-      showApprovalDemo,
       showPageNewChatButton,
       t,
     ],
@@ -2466,15 +2449,7 @@ function AgentPanelInner({
             >
               <MultiTabAssistantChatLazy
                 {...assistantChatProps}
-                threadContentSlot={
-                  showActivityDemo ? (
-                    <AgentActivityTraceDemo />
-                  ) : showApprovalDemo ? (
-                    <AgentApprovalCardDemo />
-                  ) : (
-                    assistantChatProps.threadContentSlot
-                  )
-                }
+                threadContentSlot={assistantChatProps.threadContentSlot}
                 agentChatSurface={effectiveAgentChatSurface}
                 apiUrl={apiUrl}
                 showHeader={false}

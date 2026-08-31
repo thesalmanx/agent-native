@@ -3023,6 +3023,11 @@ describe("local-core dev aliases and router dedupe", () => {
 
   it("source-aliases workspace package dependencies during app builds", () => {
     const previousCwd = process.cwd();
+    const agentkitRoot = path.resolve(
+      import.meta.dirname,
+      "../../..",
+      "agentkit",
+    );
     const toolkitRoot = path.resolve(
       import.meta.dirname,
       "../../..",
@@ -3038,6 +3043,7 @@ describe("local-core dev aliases and router dedupe", () => {
       path.join(appDir, "package.json"),
       JSON.stringify({
         dependencies: {
+          "@agent-native/agentkit": "workspace:*",
           "@agent-native/pinpoint": "workspace:*",
           "@agent-native/toolkit": "workspace:*",
         },
@@ -3061,6 +3067,14 @@ describe("local-core dev aliases and router dedupe", () => {
 
       expect(popoverAlias?.replacement).toBe(
         path.join(toolkitRoot, "src/ui/$1"),
+      );
+      const agentkitStylesAlias = aliases.find((alias) =>
+        alias.find instanceof RegExp
+          ? alias.find.test("@agent-native/agentkit/react/styles.css")
+          : alias.find === "@agent-native/agentkit/react/styles.css",
+      );
+      expect(agentkitStylesAlias?.replacement).toBe(
+        path.join(agentkitRoot, "src/styles.css"),
       );
       expect(
         aliases.some((alias) =>

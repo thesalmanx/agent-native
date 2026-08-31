@@ -745,9 +745,11 @@ async function resolveProviderBaseUrl(
   envVar: string,
 ): Promise<string | undefined> {
   const raw = await resolveSecret(envVar);
+  const deployValue = canUseDeployCredentialFallbackForRequest(envVar)
+    ? readDeployCredentialEnv(envVar)
+    : undefined;
 
-  if (!raw && canUseDeployCredentialFallbackForRequest(envVar)) {
-    const deployValue = readDeployCredentialEnv(envVar);
+  if (!raw) {
     if (!deployValue) return undefined;
     return validateProviderBaseUrl(deployValue, {
       allowPrivate: true,
@@ -756,6 +758,11 @@ async function resolveProviderBaseUrl(
 
   return raw
     ? validateProviderBaseUrl(raw, {
+        // Deployment configuration is operator-owned. `resolveSecret` may
+        // return that fallback directly, so preserve the same private-network
+        // allowance as the explicit deploy-only branch above without extending
+        // it to user-, org-, or workspace-scoped endpoint values.
+        allowPrivate: deployValue !== undefined && raw === deployValue,
         allowLocalOllama:
           envVar === OLLAMA_BASE_URL_ENV_VAR &&
           process.env.NODE_ENV === "development",

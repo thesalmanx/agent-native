@@ -1028,6 +1028,19 @@ export interface UseGuidedQuestionFlowOptions {
     formattedAnswers: string;
   }) => string;
   buildSkipContext?: () => string;
+  /**
+   * Host delivery boundary for submitted answers. Omit to use the shared
+   * browser chat bridge; AgentKit hosts can route the visible answer through
+   * their controller without maintaining a second conversation runtime.
+   */
+  onSubmitMessage?: (input: {
+    answers: GuidedQuestionAnswers;
+    formattedAnswers: string;
+    message: string;
+    context: string;
+  }) => void;
+  /** Host delivery boundary for the optional skip action. */
+  onSkipMessage?: (input: { message: string; context: string }) => void;
 }
 
 /**
@@ -1055,6 +1068,8 @@ export function useGuidedQuestionFlow({
   skipMessage = "Skip the questions — decide for me.",
   buildSubmitContext,
   buildSkipContext,
+  onSubmitMessage,
+  onSkipMessage,
 }: UseGuidedQuestionFlowOptions = {}) {
   const queryClient = useQueryClient();
   const [payload, setPayload] = useState<GuidedQuestionPayload | null>(null);
@@ -1183,14 +1198,23 @@ export function useGuidedQuestionFlow({
       ]
         .filter(Boolean)
         .join("\n\n");
-      sendToAgentChat({
-        message: resolvedSubmitMessage,
-        context,
-        submit: true,
-      });
+      if (onSubmitMessage) {
+        onSubmitMessage({
+          answers,
+          formattedAnswers,
+          message: resolvedSubmitMessage,
+          context,
+        });
+      } else {
+        sendToAgentChat({
+          message: resolvedSubmitMessage,
+          context,
+          submit: true,
+        });
+      }
       clear();
     },
-    [buildSubmitContext, clear, visiblePayload, submitMessage],
+    [buildSubmitContext, clear, onSubmitMessage, visiblePayload, submitMessage],
   );
 
   const handleSkip = useCallback(() => {
@@ -1200,17 +1224,19 @@ export function useGuidedQuestionFlow({
       clear();
       return;
     }
-    sendToAgentChat({
-      message: visiblePayload?.skipMessage ?? skipMessage,
-      // Skipping a variant set asks for another one — the replacement needs the
-      // same context the first set was built from.
-      context: [buildSkipContext?.(), visiblePayload?.submitContext]
-        .filter(Boolean)
-        .join("\n\n"),
-      submit: true,
-    });
+    const message = visiblePayload?.skipMessage ?? skipMessage;
+    // Skipping a variant set asks for another one — the replacement needs the
+    // same context the first set was built from.
+    const context = [buildSkipContext?.(), visiblePayload?.submitContext]
+      .filter(Boolean)
+      .join("\n\n");
+    if (onSkipMessage) {
+      onSkipMessage({ message, context });
+    } else {
+      sendToAgentChat({ message, context, submit: true });
+    }
     clear();
-  }, [buildSkipContext, clear, visiblePayload, skipMessage]);
+  }, [buildSkipContext, clear, onSkipMessage, visiblePayload, skipMessage]);
 
   return {
     payload: visiblePayload,
