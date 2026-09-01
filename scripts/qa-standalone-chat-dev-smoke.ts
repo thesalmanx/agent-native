@@ -1085,7 +1085,7 @@ async function readBodyPreview(page: Page): Promise<string> {
   }
 }
 
-async function gotoAndWaitForChatPage(
+async function waitForChatPage(
   page: Page,
   running: RunningDev,
   path: string,
@@ -1097,7 +1097,6 @@ async function gotoAndWaitForChatPage(
   let lastBody = "";
   let lastUrl = "";
 
-  await gotoCommitted(page, `${running.baseUrl}${path}`, "domcontentloaded");
   while (Date.now() < deadline) {
     browserErrors.length = 0;
     httpErrors.length = 0;
@@ -2211,7 +2210,7 @@ async function runBrowserSmoke(
   );
 
   log("assertion pass: durable Chat surface after authenticated handoff");
-  await gotoAndWaitForChatPage(
+  await waitForChatPage(
     page,
     running,
     durableThreadPath,
