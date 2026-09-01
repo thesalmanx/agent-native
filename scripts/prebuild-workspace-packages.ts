@@ -292,11 +292,7 @@ const modeTargets: Record<PrebuildMode, string[]> = {
 
 function readMode(): PrebuildMode {
   const raw = process.argv[2] ?? "dev";
-  if (
-    raw === "agentkit-acceptance" ||
-    raw === "dev" ||
-    raw === "postinstall"
-  ) {
+  if (raw === "agentkit-acceptance" || raw === "dev" || raw === "postinstall") {
     return raw;
   }
   console.error(

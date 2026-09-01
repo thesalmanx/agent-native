@@ -139,13 +139,13 @@ describe("page composer geometry", () => {
 });
 
 describe("message branch controls", () => {
-  it("does not expose unsupported alternate-response navigation", () => {
+  it("exposes alternate-response navigation through assistant-ui primitives", () => {
     const source = readFileSync("src/client/chat/message-components.tsx", {
       encoding: "utf8",
     });
 
-    expect(source).not.toContain("BranchPickerPrimitive");
-    expect(source).not.toContain("MessageBranchPicker");
+    expect(source).toContain("BranchPickerPrimitive.Root");
+    expect(source).toContain("MessageBranchPicker");
   });
 });
 

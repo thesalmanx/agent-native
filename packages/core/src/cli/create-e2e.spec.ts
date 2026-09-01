@@ -1492,15 +1492,15 @@ describe("template/core version compatibility", () => {
     }
   });
 
-  it("pins unpublished generated framework dependencies to latest", () => {
-    // In monorepo source, core's own package.json still has a raw workspace
-    // protocol for Toolkit and no published AgentKit entry-package range, so
-    // falling back to `latest` is correct for both.
+  it("pins unpublished generated framework dependencies to compatible versions", () => {
+    // Toolkit has no release-train package in monorepo source, so it falls
+    // back to `latest`. AgentKit packages share the local Protocol version so
+    // every generated package stays on one compatibility-tested release train.
     const previous = process.env.AGENT_NATIVE_CREATE_USE_LOCAL_CORE;
     delete process.env.AGENT_NATIVE_CREATE_USE_LOCAL_CORE;
     try {
       expect(_getToolkitDependencyVersion()).toBe("latest");
-      expect(_getAgentKitDependencyVersion()).toBe("latest");
+      expect(_getAgentKitDependencyVersion()).toBe("^0.1.0");
     } finally {
       if (previous === undefined) {
         delete process.env.AGENT_NATIVE_CREATE_USE_LOCAL_CORE;
@@ -1528,7 +1528,7 @@ describe("template/core version compatibility", () => {
           return JSON.stringify({
             dependencies: {
               "@agent-native/toolkit": "^0.9.1",
-              "@agent-native/agentkit": "^0.2.3",
+              "@agent-native/agentkit-protocol": "^0.2.3",
             },
           });
         }

@@ -33,7 +33,7 @@ console.log(report.checks);
   acknowledgement.
 - **timeoutMs**: an optional per-operation timeout. The default is 2,000 ms.
 - **isUnsupportedError**: an optional predicate for a host's typed unsupported
-error.
+  error.
 
 The baseline `transport` form is borrowed. Conformance never disposes it; the
 caller retains lifecycle ownership.

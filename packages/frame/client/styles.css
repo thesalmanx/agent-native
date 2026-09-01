@@ -75,9 +75,7 @@ body {
 
 .agent-frame-shell {
   --agent-kit-recessed-surface: hsl(var(--background));
-  --agent-kit-nav-surface: hsl(
-    var(--sidebar-background, var(--background))
-  );
+  --agent-kit-nav-surface: hsl(var(--sidebar-background, var(--background)));
   --agent-kit-raised-surface: hsl(var(--card));
   --agent-native-lower-surface: var(--agent-kit-nav-surface);
   --agent-native-raised-surface: var(--agent-kit-recessed-surface);

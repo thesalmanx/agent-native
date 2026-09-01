@@ -110,7 +110,7 @@ allowBuilds:
   "@google/genai": true
   "@parcel/watcher": true
   "@swc/core": true
-  '@vgpu/adapter-node': set this to true or false
+  "@vgpu/adapter-node": set this to true or false
   better-sqlite3: true
   canvas: true
   core-js: true
