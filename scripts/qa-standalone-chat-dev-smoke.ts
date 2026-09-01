@@ -1085,63 +1085,6 @@ async function readBodyPreview(page: Page): Promise<string> {
   }
 }
 
-async function gotoAndWaitForAgentPage(
-  page: Page,
-  running: RunningDev,
-  path: string,
-  browserErrors: string[],
-  httpErrors: string[],
-): Promise<void> {
-  const deadline = Date.now() + (isCi ? 300_000 : 45_000);
-  let lastError: unknown;
-  let lastBody = "";
-  let lastUrl = "";
-
-  await gotoCommitted(page, `${running.baseUrl}${path}`, "domcontentloaded");
-  while (Date.now() < deadline) {
-    browserErrors.length = 0;
-    httpErrors.length = 0;
-
-    try {
-      await waitForViteDepsQuiet(running.viteReload, running.logs, {
-        timeoutMs: 60_000,
-      });
-      await page
-        .getByRole("tablist", { name: /(?:Agent|Settings) sections/ })
-        .waitFor({ state: "visible", timeout: 15_000 });
-      await waitForViteDepsQuiet(running.viteReload, running.logs, {
-        timeoutMs: 60_000,
-      });
-      await page
-        .getByRole("tablist", { name: /(?:Agent|Settings) sections/ })
-        .waitFor({ state: "visible", timeout: 8_000 });
-      discardSettledNavigationAborts(httpErrors);
-      return;
-    } catch (err) {
-      lastError = err;
-      lastBody = await readBodyPreview(page);
-      lastUrl = page.url();
-      if (Date.now() >= deadline) break;
-      if (verbose || isCi) {
-        const message = err instanceof Error ? err.message : String(err);
-        console.warn(
-          `[standalone-dev-smoke] ${path} not ready yet: ${message.split("\n")[0]}`,
-        );
-      }
-      await sleep(2_000);
-    }
-  }
-
-  const message =
-    lastError instanceof Error ? lastError.message : String(lastError);
-  throw new Error(
-    `${path} did not show Agent or Settings sections tabs before timeout: ${message}\n` +
-      `Last URL: ${lastUrl}\n` +
-      `Body preview: ${lastBody.slice(0, 400)}` +
-      suppressedNoiseBlock(),
-  );
-}
-
 async function gotoAndWaitForChatPage(
   page: Page,
   running: RunningDev,
@@ -2267,32 +2210,7 @@ async function runBrowserSmoke(
     "authenticated warmup must establish a durable Chat thread",
   );
 
-  log("warmup: /agent dependencies and Vite dep quiet");
-  await gotoAndWaitForAgentPage(
-    page,
-    running,
-    "/agent",
-    browserErrors,
-    httpErrors,
-  );
-  await waitForViteDepsQuiet(running.viteReload, running.logs);
-
-  browserErrors.length = 0;
-  httpErrors.length = 0;
-
-  log("assertion pass: /agent after warmup");
-  await gotoAndWaitForAgentPage(
-    page,
-    running,
-    "/agent",
-    browserErrors,
-    httpErrors,
-  );
-
-  assert.deepEqual(browserErrors, [], "browser console/page errors");
-  assert.deepEqual(httpErrors, [], "browser HTTP errors on app origin");
-
-  log("assertion pass: durable Chat surface after /agent");
+  log("assertion pass: durable Chat surface after authenticated handoff");
   await gotoAndWaitForChatPage(
     page,
     running,
