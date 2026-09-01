@@ -1069,6 +1069,8 @@ const CORE_CLIENT_SUBPATHS = [
   "@agent-native/core",
   "@agent-native/core/client",
   "@agent-native/core/client/agent-chat",
+  "@agent-native/core/client/agentkit-chat",
+  "@agent-native/core/client/agent-native-icon",
   "@agent-native/core/client/analytics",
   "@agent-native/core/client/automation",
   "@agent-native/core/client/chat",
@@ -1101,6 +1103,9 @@ const CORE_CLIENT_SUBPATHS = [
   "@agent-native/core/client/resources",
   "@agent-native/core/client/route-chunk-recovery",
   "@agent-native/core/client/settings",
+  "@agent-native/core/client/theme",
+  "@agent-native/core/client/error-boundary",
+  "@agent-native/core/client/feedback",
   "@agent-native/core/client/ui",
   "@agent-native/core/client/uploads",
   "@agent-native/core/client/widgets",
@@ -1115,6 +1120,8 @@ const CORE_CLIENT_SUBPATHS = [
   "@agent-native/core/client/extensions",
   "@agent-native/core/client/tools", // legacy alias
   "@agent-native/core/client/org",
+  "@agent-native/core/client/org-switcher",
+  "@agent-native/core/client/team-page",
   "@agent-native/core/client/db-admin",
   "@agent-native/core/client/observability",
   "@agent-native/core/client/onboarding",
@@ -1421,29 +1428,32 @@ function getAgentKitOptimizeDeps(cwd: string): string[] {
     ...(hasDep("react-dom", cwd)
       ? ["react-dom", "react-dom/client", "react-dom/server"]
       : []),
-    ...(hasDep("@agent-native/agentkit", cwd)
-      ? ["@agent-native/agentkit/react"]
-      : []),
     ...(hasDep("@agent-native/toolkit", cwd)
-      ? [
-          "@agent-native/toolkit/agentkit",
-          "@agent-native/toolkit/clipboard",
-          "@agent-native/toolkit/composer/runtime-adapters",
-          "@agent-native/toolkit/markdown-block-split",
-          "@agent-native/toolkit/streaming-text-smoothing",
-          "@agent-native/toolkit/ui/command",
-          "@agent-native/toolkit/ui/cube-loader",
-          "@agent-native/toolkit/ui/dialog",
-          "@agent-native/toolkit/ui/popover",
-          "@agent-native/toolkit/ui/sonner",
-          "@agent-native/toolkit > @radix-ui/react-tooltip",
-        ]
+      ? ["@agent-native/toolkit > @radix-ui/react-tooltip"]
       : []),
     ...getDefaultOptimizeDeps(cwd).filter(
       (dep) =>
         requiredTransitiveDeps.has(dep) ||
         dep.startsWith("@agent-native/core > highlight.js/"),
     ),
+  ];
+}
+
+function getAgentKitOptimizeExcludes(): string[] {
+  // These packages already ship browser-native ESM. Prebundling them makes
+  // Vite traverse the entire framework graph before the generated Chat server
+  // can answer its first action request, which can starve constrained CI and
+  // serverless development hosts. Their actual third-party CommonJS seams stay
+  // in getAgentKitOptimizeDeps above.
+  return [
+    "@agent-native/agentkit",
+    "@agent-native/agentkit-react",
+    "@agent-native/agentkit-client",
+    "@agent-native/agentkit-protocol",
+    "@agent-native/agentkit-adapters",
+    "@agent-native/core",
+    ...CORE_CLIENT_SUBPATHS,
+    "@agent-native/toolkit",
   ];
 }
 
@@ -1471,6 +1481,14 @@ function getCoreSourceAliases(
     "@agent-native/core/client/agent-chat": path.join(
       coreSrc,
       "client/agent-chat/index.ts",
+    ),
+    "@agent-native/core/client/agentkit-chat": path.join(
+      coreSrc,
+      "client/agentkit-chat/index.ts",
+    ),
+    "@agent-native/core/client/agent-native-icon": path.join(
+      coreSrc,
+      "client/components/icons/AgentNativeIcon.tsx",
     ),
     "@agent-native/core/client/analytics": path.join(
       coreSrc,
@@ -1597,6 +1615,15 @@ function getCoreSourceAliases(
       coreSrc,
       "client/settings/index.ts",
     ),
+    "@agent-native/core/client/theme": path.join(coreSrc, "client/theme.ts"),
+    "@agent-native/core/client/error-boundary": path.join(
+      coreSrc,
+      "client/ErrorBoundary.tsx",
+    ),
+    "@agent-native/core/client/feedback": path.join(
+      coreSrc,
+      "client/FeedbackButton.tsx",
+    ),
     "@agent-native/core/client/ui": path.join(coreSrc, "client/ui/index.ts"),
     "@agent-native/core/client/uploads": path.join(
       coreSrc,
@@ -1634,6 +1661,14 @@ function getCoreSourceAliases(
       "client/extensions/index.ts",
     ),
     "@agent-native/core/client/org": path.join(coreSrc, "client/org/index.ts"),
+    "@agent-native/core/client/org-switcher": path.join(
+      coreSrc,
+      "client/org/OrgSwitcher.tsx",
+    ),
+    "@agent-native/core/client/team-page": path.join(
+      coreSrc,
+      "client/org/TeamPage.tsx",
+    ),
     "@agent-native/core/client/db-admin": path.join(
       coreSrc,
       "client/db-admin/index.ts",
@@ -4206,10 +4241,10 @@ function createAgentNativeConfig(
       // serves stale code even after the source / dist is updated.
       exclude: [
         ...(findCoreSrcDir(cwd) !== null ? CORE_CLIENT_SUBPATHS : []),
+        ...(usesAgentKit ? getAgentKitOptimizeExcludes() : []),
         // Workspace dependencies resolve to source and must remain outside the
-        // optimizer for HMR. Packed or published framework artifacts are not
-        // returned here: prebundling those compiled modules is what prevents a
-        // cold Chat route from transforming the full framework graph on demand.
+        // optimizer for HMR. This supplements the explicit AgentKit framework
+        // exclusions above for every other local source package.
         ...localWorkspacePackageDeps
           .filter(
             (pkg) =>

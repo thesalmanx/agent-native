@@ -2710,7 +2710,7 @@ describe("local-core dev aliases and router dedupe", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it("prebundles AgentKit through its narrow Toolkit facade", () => {
+  it("keeps AgentKit framework packages as ESM and prebundles only third-party seams", () => {
     const previousCwd = process.cwd();
     const tmpDir = fs.mkdtempSync(
       path.join(os.tmpdir(), "an-vite-agentkit-esm-"),
@@ -2742,29 +2742,28 @@ describe("local-core dev aliases and router dedupe", () => {
         (config.optimizeDeps as { include?: string[] } | undefined)?.include ??
         [];
 
-      expect(exclude).not.toContain("@agent-native/agentkit");
-      expect(exclude).not.toContain("@agent-native/agentkit-react");
-      expect(exclude).not.toContain("@agent-native/core");
-      expect(include).toContain("@agent-native/toolkit/agentkit");
-      expect(include).toEqual(
+      expect(exclude).toEqual(
         expect.arrayContaining([
-          "@agent-native/toolkit/clipboard",
-          "@agent-native/toolkit/composer/runtime-adapters",
-          "@agent-native/toolkit/markdown-block-split",
-          "@agent-native/toolkit/streaming-text-smoothing",
-          "@agent-native/toolkit/ui/command",
-          "@agent-native/toolkit/ui/cube-loader",
-          "@agent-native/toolkit/ui/dialog",
-          "@agent-native/toolkit/ui/popover",
-          "@agent-native/toolkit/ui/sonner",
+          "@agent-native/agentkit",
+          "@agent-native/agentkit-react",
+          "@agent-native/core",
+          "@agent-native/core/client/agentkit-chat",
+          "@agent-native/toolkit",
         ]),
+      );
+      expect(include).not.toContain("@agent-native/toolkit/agentkit");
+      expect(include).not.toContain("@agent-native/toolkit/clipboard");
+      expect(include).not.toContain(
+        "@agent-native/toolkit/composer/runtime-adapters",
+      );
+      expect(include).not.toContain(
+        "@agent-native/toolkit/streaming-text-smoothing",
       );
       expect(
         include.some((entry) => entry.endsWith("@radix-ui/react-tooltip")),
       ).toBe(true);
-      expect(exclude).not.toContain("@agent-native/toolkit");
       expect(exclude).not.toContain("@radix-ui/react-tooltip");
-      expect(include).toContain("@agent-native/agentkit/react");
+      expect(include).not.toContain("@agent-native/agentkit/react");
       expect(include).not.toContain("@agent-native/toolkit/composer");
       expect(include).not.toContain(
         "@agent-native/toolkit/editor/SharedRichEditor",
