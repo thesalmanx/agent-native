@@ -884,6 +884,21 @@ function suppressedNoiseBlock(): string {
   return `\nSuppressed browser noise:\n${suppressedBrowserNoise.join("\n")}`;
 }
 
+function discardSettledNavigationAborts(httpErrors: string[]): void {
+  const retained: string[] = [];
+  for (const error of httpErrors) {
+    if (
+      error.startsWith("requestfailed ") &&
+      error.endsWith("net::ERR_ABORTED")
+    ) {
+      recordSuppressedNoise(`settled Vite navigation cancellation ${error}`);
+      continue;
+    }
+    retained.push(error);
+  }
+  httpErrors.splice(0, httpErrors.length, ...retained);
+}
+
 function isBenignConsoleError(text: string): boolean {
   if (text.includes("favicon")) return true;
   // The response listener classifies these with the request URL and status;
@@ -1098,6 +1113,7 @@ async function gotoAndWaitForAgentPage(
       await page
         .getByRole("tablist", { name: /(?:Agent|Settings) sections/ })
         .waitFor({ state: "visible", timeout: 8_000 });
+      discardSettledNavigationAborts(httpErrors);
       return;
     } catch (err) {
       lastError = err;
@@ -1153,6 +1169,7 @@ async function gotoAndWaitForChatPage(
         .getByText(/Ask me anything|How can I help/i)
         .first()
         .waitFor({ state: "visible", timeout: 8_000 });
+      discardSettledNavigationAborts(httpErrors);
       return;
     } catch (err) {
       lastError = err;
