@@ -1386,31 +1386,26 @@ function getDefaultOptimizeDeps(cwd: string): string[] {
 }
 
 function getAgentKitOptimizeDeps(cwd: string): string[] {
-  // AgentKit, Core, and Toolkit stay as ESM. Prebundle only React's shared
-  // singleton and the CommonJS seams reached from the excluded Toolkit graph;
-  // Vite discovers direct app dependencies from the route itself. Eagerly
-  // including Core's assistant-ui, syntax-highlighting, charting, and state
-  // graphs made a cold generated Chat spend minutes optimizing modules it does
-  // not render.
+  // AgentKit, Core, Toolkit, and their ESM dependencies stay native. Prebundle
+  // only React's shared singleton and the CommonJS leaf modules imported by
+  // those ESM graphs. Vite's normal discovery follows every lazy route in a
+  // generated app; that made a cold Chat optimize unrelated inspector,
+  // charting, syntax-highlighting, and editor surfaces before rendering.
   return [
     ...(hasDep("react", cwd) ? ["react"] : []),
     ...(hasDep("react-dom", cwd)
       ? ["react-dom", "react-dom/client", "react-dom/server"]
       : []),
-    "@agent-native/core > @assistant-ui/react",
-    "@agent-native/core > @assistant-ui/react > assistant-stream",
-    "@agent-native/core > @assistant-ui/react > assistant-stream/utils",
-    "@agent-native/core > react-markdown",
+    "@agent-native/core > @assistant-ui/react > assistant-stream > secure-json-parse",
     "@agent-native/core > react-markdown > void-elements",
-    ...(hasDep("zustand", cwd)
-      ? ["zustand", "zustand/shallow", "zustand/traditional", "zustand/vanilla"]
-      : []),
-    ...(hasDep("clsx", cwd) ? ["clsx"] : []),
-    ...(hasDep("tailwind-merge", cwd) ? ["tailwind-merge"] : []),
-    ...(hasDep("recharts", cwd) ? ["recharts"] : []),
+    "@agent-native/core > react-markdown > unified > extend",
+    "@agent-native/core > react-markdown > hast-util-to-jsx-runtime > style-to-js",
+    "@agent-native/core > react-markdown > remark-parse > mdast-util-from-markdown > micromark > debug",
+    "@agent-native/core > recharts > decimal.js-light",
+    "@agent-native/core > recharts > eventemitter3",
+    "@agent-native/core > recharts > react-is",
     ...(hasDep("@agent-native/toolkit", cwd)
       ? [
-          "@agent-native/toolkit > @radix-ui/react-tooltip",
           "@agent-native/toolkit > @tiptap/react > use-sync-external-store/shim/index.js",
           "@agent-native/toolkit > @tiptap/react > use-sync-external-store/shim/with-selector.js",
           "@agent-native/toolkit > tiptap-markdown > markdown-it-task-lists",
@@ -4203,6 +4198,12 @@ function createAgentNativeConfig(
         },
     optimizeDeps: {
       ...userOptimizeDeps,
+      // AgentKit owns an explicit browser compatibility floor. Discovery scans
+      // lazy application routes too, so allowing it here makes the first Chat
+      // request wait for unrelated product surfaces to prebundle.
+      noDiscovery: usesAgentKit
+        ? (userConfig.optimizeDeps?.noDiscovery ?? true)
+        : userConfig.optimizeDeps?.noDiscovery,
       include: [
         ...(usesAgentKit
           ? getAgentKitOptimizeDeps(cwd)
