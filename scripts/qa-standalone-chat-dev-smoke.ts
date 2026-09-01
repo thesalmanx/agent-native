@@ -1097,18 +1097,20 @@ async function gotoAndWaitForAgentPage(
   let lastBody = "";
   let lastUrl = "";
 
+  await gotoCommitted(page, `${running.baseUrl}${path}`, "domcontentloaded");
   while (Date.now() < deadline) {
     browserErrors.length = 0;
     httpErrors.length = 0;
 
     try {
-      await gotoCommitted(
-        page,
-        `${running.baseUrl}${path}`,
-        "domcontentloaded",
-      );
       await waitForViteDepsQuiet(running.viteReload, running.logs, {
-        timeoutMs: 30_000,
+        timeoutMs: 60_000,
+      });
+      await page
+        .getByRole("tablist", { name: /(?:Agent|Settings) sections/ })
+        .waitFor({ state: "visible", timeout: 15_000 });
+      await waitForViteDepsQuiet(running.viteReload, running.logs, {
+        timeoutMs: 60_000,
       });
       await page
         .getByRole("tablist", { name: /(?:Agent|Settings) sections/ })
@@ -1152,23 +1154,26 @@ async function gotoAndWaitForChatPage(
   let lastBody = "";
   let lastUrl = "";
 
+  await gotoCommitted(page, `${running.baseUrl}${path}`, "domcontentloaded");
   while (Date.now() < deadline) {
     browserErrors.length = 0;
     httpErrors.length = 0;
 
     try {
-      await gotoCommitted(
-        page,
-        `${running.baseUrl}${path}`,
-        "domcontentloaded",
-      );
       await waitForViteDepsQuiet(running.viteReload, running.logs, {
-        timeoutMs: 30_000,
+        timeoutMs: 60_000,
       });
-      await page
-        .getByText(/Ask me anything|How can I help/i)
-        .first()
-        .waitFor({ state: "visible", timeout: 8_000 });
+      const chat = page.locator("section.agentkit-chat");
+      const modelButton = page.locator(
+        '[data-agent-composer-slot="model-button"]',
+      );
+      await chat.waitFor({ state: "visible", timeout: 15_000 });
+      await modelButton.waitFor({ state: "visible", timeout: 30_000 });
+      await waitForViteDepsQuiet(running.viteReload, running.logs, {
+        timeoutMs: 60_000,
+      });
+      await chat.waitFor({ state: "visible", timeout: 8_000 });
+      await modelButton.waitFor({ state: "visible", timeout: 8_000 });
       discardSettledNavigationAborts(httpErrors);
       return;
     } catch (err) {
