@@ -14,6 +14,12 @@ const coreRequire = createRequire(
 );
 
 export default defineConfig({
+  optimizeDeps: {
+    // React Router discovers the Chat route after Vite's default HTML crawl.
+    // Scan its source up front so the first authenticated handoff cannot be
+    // interrupted by a sequence of dependency-optimizer reloads.
+    entries: ["app/**/*.{ts,tsx}"],
+  },
   resolve: {
     // Core and toolkit both use assistant-ui contexts. Keep published and
     // linked graphs on one store so the agent sidebar can compose reliably.
