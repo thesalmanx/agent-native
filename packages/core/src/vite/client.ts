@@ -1107,13 +1107,15 @@ const CORE_CLIENT_SUBPATHS = [
   "@agent-native/core/voice",
 ];
 
-// AgentKit's React package reaches Toolkit through a wide ESM graph. Vite's
-// optimizer serializes the first route request behind that graph on cold,
-// resource-constrained machines; serving the framework packages as ESM keeps
-// the request responsive while their third-party dependencies remain bundled.
+// AgentKit's React package reaches Core and Toolkit through a wide ESM graph.
+// Vite's optimizer serializes the first route request behind that graph on
+// cold, resource-constrained machines; serving the framework packages as ESM
+// keeps the request responsive while their third-party dependencies remain
+// bundled. Excluding the package roots also covers their exported subpaths.
 const AGENTKIT_CLIENT_PACKAGE_ROOTS = [
   "@agent-native/agentkit",
   "@agent-native/agentkit-react",
+  "@agent-native/core",
   "@agent-native/toolkit",
 ];
 
@@ -1142,11 +1144,12 @@ const disableDepSourcemapsPlugin: Plugin = {
 
 function getDefaultOptimizeDeps(cwd: string): string[] {
   const inMonorepo = findCoreSrcDir(cwd) !== null;
+  const usesAgentKit = hasDep("@agent-native/agentkit", cwd);
   const entries: Array<{ specifier: string; packageName?: string }> = [
     // In monorepo mode the source alias resolves these to src/ on every
     // import, so prebundling from dist/ would just create a stale snapshot.
     // Skip them entirely — `optimizeDeps.exclude` below makes that explicit.
-    ...(inMonorepo
+    ...(inMonorepo || usesAgentKit
       ? []
       : ([
           { specifier: "@agent-native/core" },

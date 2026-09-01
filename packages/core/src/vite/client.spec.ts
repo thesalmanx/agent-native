@@ -2704,9 +2704,13 @@ describe("local-core dev aliases and router dedupe", () => {
         expect.arrayContaining([
           "@agent-native/agentkit",
           "@agent-native/agentkit-react",
+          "@agent-native/core",
           "@agent-native/toolkit",
         ]),
       );
+      expect(
+        (config.optimizeDeps as { include?: string[] } | undefined)?.include,
+      ).not.toContain("@agent-native/core");
     } finally {
       process.chdir(previousCwd);
       fs.rmSync(tmpDir, { recursive: true, force: true });
