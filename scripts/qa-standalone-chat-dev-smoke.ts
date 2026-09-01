@@ -17,7 +17,7 @@
  * CI flake strategy (do not fight Vite first-load dep optimization):
  * 1. Poll the unauthenticated JSON API from process launch until it returns 401.
  * 2. One page.goto to `/home` so local auto-login runs before the public shell.
- * 3. Navigate to `/` and verify the authenticated client handoff to `/home`.
+ * 3. Navigate to `/` and verify the authenticated client handoff to a durable thread.
  * 4. waitForViteDepsQuiet(server logs) before strict assertions.
  * 5. Retry goto/evaluate only for transient Playwright navigation errors.
  */
@@ -245,18 +245,22 @@ function installApprovalActionFixture(): void {
   const source = fs.readFileSync(agentChatPluginPath, "utf8");
   if (source.includes('"accept-agentkit-release"')) return;
 
-  const initialToolsAnchor =
-    'const INITIAL_TOOL_NAMES = ["view-screen", "navigate", "hello"];';
+  const initialToolsPattern = /const INITIAL_TOOL_NAMES = \[([\s\S]*?)\n\];/g;
+  const initialToolsDeclarations = [...source.matchAll(initialToolsPattern)];
   assert.equal(
-    source.split(initialToolsAnchor).length - 1,
+    initialToolsDeclarations.length,
     1,
     "generated Chat app must expose the expected initial-tool declaration",
   );
+  const initialToolsDeclaration = initialToolsDeclarations[0]![0];
   fs.writeFileSync(
     agentChatPluginPath,
     source.replace(
-      initialToolsAnchor,
-      'const INITIAL_TOOL_NAMES = [\n  "view-screen",\n  "navigate",\n  "hello",\n  "accept-agentkit-release",\n];',
+      initialToolsDeclaration,
+      initialToolsDeclaration.replace(
+        /\n\];$/,
+        '\n  "accept-agentkit-release",\n];',
+      ),
     ),
   );
 }
@@ -269,12 +273,12 @@ function installAcceptanceTransportFixture(): void {
   );
   fs.copyFileSync(acceptanceTransportFixture, fixtureTarget);
 
-  const routePath = path.join(appDir, "app/routes/_index.tsx");
+  const routePath = path.join(appDir, "app/routes/home.tsx");
   const source = fs.readFileSync(routePath, "utf8");
   if (source.includes("instrumentAgentKitAcceptanceTransport(")) return;
   const importAnchor = 'import { TAB_ID } from "@/lib/tab-id";';
-  const transportAnchor = "      createAgentNativeAgentKitTransport({";
-  const closeAnchor = "      }),\n    [resolvedThreadId],";
+  const transportAnchor = "    createAgentNativeAgentKitTransport({";
+  const closeAnchor = "    }),\n  );";
   assert.equal(
     source.split(importAnchor).length - 1,
     1,
@@ -299,9 +303,9 @@ function installAcceptanceTransportFixture(): void {
       )
       .replace(
         transportAnchor,
-        "      instrumentAgentKitAcceptanceTransport(\n        createAgentNativeAgentKitTransport({",
+        "    instrumentAgentKitAcceptanceTransport(\n      createAgentNativeAgentKitTransport({",
       )
-      .replace(closeAnchor, "        }),\n      ),\n    [resolvedThreadId],"),
+      .replace(closeAnchor, "      }),\n    ),\n  );"),
   );
 }
 
@@ -1227,10 +1231,11 @@ async function waitForAuthenticatedShell(
     baseUrl,
     renavigateOnTimeout: true,
   });
-  assert.equal(
+  await page.waitForURL(/\/chat\/chat-[^/]+$/, { timeout: shellTimeoutMs });
+  assert.match(
     new URL(page.url()).pathname,
-    "/home",
-    "authenticated public root should hand off to /home",
+    /^\/chat\/chat-[^/]+$/,
+    "authenticated public root should hand off to a durable Chat thread",
   );
 
   return sessionEmail;
@@ -1540,7 +1545,7 @@ async function handleLoopbackCompletion(
       requestNumber,
       ["### Second response\n\n", "- independent\n", "- **buffered**"],
       state,
-      120,
+      1_000,
     );
     return;
   }
@@ -1667,10 +1672,23 @@ async function waitForLoopbackState(
 }
 
 async function setDarkMode(page: Page, enabled: boolean): Promise<void> {
-  await page.evaluate((dark) => {
-    document.documentElement.classList.toggle("dark", dark);
-    document.documentElement.style.colorScheme = dark ? "dark" : "light";
-  }, enabled);
+  const theme = enabled ? "dark" : "light";
+  await page.evaluate((nextTheme) => {
+    window.dispatchEvent(
+      new CustomEvent("agent-native:theme-change", {
+        detail: {
+          type: "agent-native:theme-change",
+          theme: nextTheme,
+        },
+      }),
+    );
+  }, theme);
+  await page.waitForFunction(
+    (nextTheme) =>
+      document.documentElement.classList.contains(nextTheme) &&
+      document.documentElement.dataset.theme === nextTheme,
+    theme,
+  );
 }
 
 async function assertViewportContract(
@@ -1688,6 +1706,9 @@ async function assertViewportContract(
     const transcriptRect = transcript.getBoundingClientRect();
     const footerRect = footer.getBoundingClientRect();
     const composerStyle = getComputedStyle(composer);
+    const composerBorderChannels = composerStyle.borderColor
+      .match(/\d+(?:\.\d+)?/gu)
+      ?.map(Number);
     const layoutGeometry: Array<Record<string, string | number | boolean>> = [];
     for (const selector of [
       ".agent-layout-shell",
@@ -1727,6 +1748,11 @@ async function assertViewportContract(
       footerBottom: footerRect.bottom,
       viewportHeight: window.innerHeight,
       composerBorder: composerStyle.borderColor,
+      composerBorderHasLightRim:
+        composerBorderChannels !== undefined &&
+        composerBorderChannels.length >= 3 &&
+        composerBorderChannels.slice(0, 3).every((channel) => channel >= 160) &&
+        (composerBorderChannels[3] ?? 1) > 0.01,
       composerShadow: composerStyle.boxShadow,
       layoutGeometry,
       controlGeometry: [
@@ -1795,10 +1821,10 @@ async function assertViewportContract(
       lightChannel,
       `${label}: dark elevation must not use a light shadow`,
     );
-    assert.doesNotMatch(
-      metrics.composerBorder,
-      lightChannel,
-      `${label}: dark composer border must not render a light rim`,
+    assert.equal(
+      metrics.composerBorderHasLightRim,
+      false,
+      `${label}: dark composer border must not render a light rim (${metrics.composerBorder})`,
     );
   }
 }
@@ -1908,9 +1934,9 @@ async function assertAgentKitChatAcceptance(
   const helloActivity = page.locator(".agentkit-activities-summary").first();
   await helloActivity.waitFor({ state: "visible" });
   assert.match(
-    (await helloActivity.textContent()) ?? "",
-    /\+\d+|\d+/u,
-    "collapsed activity must summarize additional work without listing every tool",
+    ((await helloActivity.textContent()) ?? "").trim(),
+    /^Worked(?: for .+)?$/u,
+    "completed activity must transition from Working to Worked",
   );
   await helloActivity.click();
   await page
@@ -2033,6 +2059,7 @@ async function assertAgentKitChatAcceptance(
   await page
     .locator(".agentkit-message-content strong")
     .filter({ hasText: "Approval continuation completed." })
+    .last()
     .waitFor({ state: "visible" });
   await approval.waitFor({ state: "detached" });
   await page
@@ -2174,6 +2201,7 @@ async function assertAgentKitChatAcceptance(
   await page
     .locator(".agentkit-message-content strong")
     .filter({ hasText: "Approval continuation completed." })
+    .last()
     .waitFor({ state: "visible" });
   await page
     .getByText("Queued follow-up completed through the production queue.", {
@@ -2431,7 +2459,7 @@ async function main(): Promise<void> {
     console.log(`  url:      ${running.baseUrl}`);
     console.log(`  app:      ${appDir}`);
     console.log(
-      "  checked:  scaffold → install → dev server → /home auth → / handoff → Chat",
+      "  checked:  scaffold → install → dev server → /home auth → / handoff → durable Chat thread",
     );
     console.log(
       "  checked:  unauthenticated startup poll recovers to HTTP 401",
