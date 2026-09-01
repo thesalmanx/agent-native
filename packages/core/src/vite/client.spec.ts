@@ -2761,7 +2761,7 @@ describe("local-core dev aliases and router dedupe", () => {
       expect(include).not.toContain(
         "@agent-native/toolkit/streaming-text-smoothing",
       );
-      expect(config.optimizeDeps?.noDiscovery).toBe(true);
+      expect(config.optimizeDeps?.noDiscovery).toBeUndefined();
       expect(
         include.some((entry) => entry.endsWith("@radix-ui/react-tooltip")),
       ).toBe(false);
@@ -2780,6 +2780,7 @@ describe("local-core dev aliases and router dedupe", () => {
           "react-dom",
           "react-dom/client",
           "react-dom/server",
+          "@agent-native/core > @assistant-ui/react",
           "@agent-native/core > @assistant-ui/react > assistant-stream > secure-json-parse",
           "@agent-native/core > react-markdown > void-elements",
           "@agent-native/core > react-markdown > unified > extend",
@@ -2788,19 +2789,15 @@ describe("local-core dev aliases and router dedupe", () => {
           "@agent-native/core > recharts > decimal.js-light",
           "@agent-native/core > recharts > eventemitter3",
           "@agent-native/core > recharts > react-is",
+          "clsx",
+          "tailwind-merge",
+          "zustand",
+          "zustand/shallow",
           "@agent-native/toolkit > @tiptap/react > use-sync-external-store/shim/with-selector.js",
           "@agent-native/toolkit > tiptap-markdown > markdown-it-task-lists",
         ]),
       );
-      expect(include).not.toEqual(
-        expect.arrayContaining([
-          "@agent-native/core > @assistant-ui/react",
-          "clsx",
-          "tailwind-merge",
-          "recharts",
-          "zustand",
-        ]),
-      );
+      expect(include).not.toEqual(expect.arrayContaining(["recharts"]));
     } finally {
       process.chdir(previousCwd);
       fs.rmSync(tmpDir, { recursive: true, force: true });

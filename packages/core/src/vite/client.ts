@@ -1396,6 +1396,7 @@ function getAgentKitOptimizeDeps(cwd: string): string[] {
     ...(hasDep("react-dom", cwd)
       ? ["react-dom", "react-dom/client", "react-dom/server"]
       : []),
+    "@agent-native/core > @assistant-ui/react",
     "@agent-native/core > @assistant-ui/react > assistant-stream > secure-json-parse",
     "@agent-native/core > react-markdown > void-elements",
     "@agent-native/core > react-markdown > unified > extend",
@@ -1404,6 +1405,9 @@ function getAgentKitOptimizeDeps(cwd: string): string[] {
     "@agent-native/core > recharts > decimal.js-light",
     "@agent-native/core > recharts > eventemitter3",
     "@agent-native/core > recharts > react-is",
+    ...(hasDep("clsx", cwd) ? ["clsx"] : []),
+    ...(hasDep("tailwind-merge", cwd) ? ["tailwind-merge"] : []),
+    ...(hasDep("zustand", cwd) ? ["zustand", "zustand/shallow"] : []),
     ...(hasDep("@agent-native/toolkit", cwd)
       ? [
           "@agent-native/toolkit > @tiptap/react > use-sync-external-store/shim/index.js",
@@ -4198,12 +4202,13 @@ function createAgentNativeConfig(
         },
     optimizeDeps: {
       ...userOptimizeDeps,
-      // AgentKit owns an explicit browser compatibility floor. Discovery scans
-      // lazy application routes too, so allowing it here makes the first Chat
-      // request wait for unrelated product surfaces to prebundle.
-      noDiscovery: usesAgentKit
-        ? (userConfig.optimizeDeps?.noDiscovery ?? true)
-        : userConfig.optimizeDeps?.noDiscovery,
+      // A consumer can bound discovery with `entries`, but disabling discovery
+      // entirely leaves CommonJS dependencies reached through the app shell
+      // unconverted. On a clean install that serves the static loading shell
+      // forever because the browser graph never becomes executable. Keep the
+      // framework packages excluded below and let the consumer's focused entry
+      // scan discover only the third-party compatibility seams it actually uses.
+      noDiscovery: userConfig.optimizeDeps?.noDiscovery,
       include: [
         ...(usesAgentKit
           ? getAgentKitOptimizeDeps(cwd)

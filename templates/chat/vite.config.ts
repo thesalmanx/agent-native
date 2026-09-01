@@ -10,9 +10,13 @@ const agentNativePlugins = agentNative as unknown as (
 export default defineConfig({
   optimizeDeps: {
     // React Router discovers route modules outside Vite's default HTML crawl.
-    // Scan them before accepting requests so an authenticated handoff never
-    // blocks on a first-use framework prebundle on smaller development hosts.
-    entries: ["app/**/*.{ts,tsx}"],
+    // Scan the shell and Chat route before accepting requests, without pulling
+    // every settings, database, editor, and inspector route into cold start.
+    entries: [
+      "app/root.tsx",
+      "app/components/layout/{Layout,Sidebar}.tsx",
+      "app/routes/{home,chat.$threadId}.tsx",
+    ],
   },
   plugins: [
     ...reactRouterPlugins(),
