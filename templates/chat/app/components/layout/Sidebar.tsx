@@ -5,11 +5,9 @@ import {
   useChatThreads,
   type ChatThreadSummary,
 } from "@agent-native/core/client/agentkit-chat";
-import { FeedbackButton } from "@agent-native/core/client/feedback";
 import { useT } from "@agent-native/core/client/i18n";
 import { openCommandMenu } from "@agent-native/core/client/navigation";
 import { OrgSwitcher } from "@agent-native/core/client/org-switcher";
-import { SidebarFooterActions } from "@agent-native/toolkit/app-shell";
 import {
   ChatHistoryList,
   type ChatHistoryItem,
@@ -25,7 +23,6 @@ import {
   IconMessages,
   IconPin,
   IconSearch,
-  IconSettings,
 } from "@tabler/icons-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
@@ -45,14 +42,6 @@ import { APP_TITLE } from "@/lib/app-config";
 import { visibleChatThreads } from "@/lib/sidebar-thread-state";
 import { cn } from "@/lib/utils";
 
-const bottomNavItems = [
-  {
-    icon: IconSettings,
-    labelKey: "navigation.settings",
-    href: "/settings",
-    view: "settings",
-  },
-];
 const CHAT_STORAGE_KEY = "chat";
 const CHAT_ACTIVE_THREAD_KEY = `agent-chat-active-thread:${CHAT_STORAGE_KEY}`;
 
@@ -453,7 +442,6 @@ export function Sidebar({
   collapsible = true,
   onCollapsedChange,
 }: SidebarProps) {
-  const location = useLocation();
   const t = useT();
   const ToggleIcon = collapsed
     ? IconLayoutSidebarLeftExpand
@@ -496,26 +484,6 @@ export function Sidebar({
       <TooltipContent side="right">{t("root.commandSearch")}</TooltipContent>
     </Tooltip>
   );
-  const feedbackButton = (
-    <FeedbackButton
-      variant={collapsed ? "icon" : "sidebar"}
-      side="right"
-      className={collapsed ? "h-8 w-8" : "min-w-0"}
-    />
-  );
-  const navClass = ({ isActive }: { isActive: boolean }) =>
-    cn(
-      "flex items-center text-sm transition-colors",
-      collapsed
-        ? "relative h-10 w-full justify-center rounded-none px-0"
-        : "h-9 gap-3 rounded-md px-3",
-      isActive
-        ? "bg-sidebar-accent text-sidebar-accent-foreground"
-        : collapsed
-          ? "text-sidebar-foreground/70 hover:bg-sidebar-accent/55 hover:text-sidebar-accent-foreground"
-          : "text-sidebar-foreground hover:bg-sidebar-accent/65 hover:text-sidebar-accent-foreground",
-    );
-
   return (
     <aside
       data-collapsed={collapsed ? "true" : "false"}
@@ -530,47 +498,26 @@ export function Sidebar({
           collapsed ? "justify-center px-1" : "gap-1 px-3",
         )}
       >
-        <Link
-          to="/home"
-          onClick={(event) => {
-            if (
-              !collapsible ||
-              !onCollapsedChange ||
-              event.metaKey ||
-              event.ctrlKey ||
-              event.shiftKey ||
-              event.altKey ||
-              event.button !== 0
-            ) {
-              return;
-            }
-            event.preventDefault();
-            onCollapsedChange(!collapsed);
-          }}
-          className={cn(
-            "flex min-w-0 items-center rounded outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            collapsed ? "size-7 justify-center" : "flex-1 gap-3",
-          )}
-          aria-label={
-            collapsible && onCollapsedChange
-              ? collapsed
-                ? t("navigation.expandSidebar")
-                : t("navigation.collapseSidebar")
-              : collapsed
-                ? APP_TITLE
-                : undefined
-          }
-        >
-          <AgentNativeIcon
-            aria-hidden="true"
-            className="h-3.5 w-6 shrink-0 text-sidebar-accent-foreground"
-          />
-          <div className={cn("min-w-0", collapsed && "sr-only")}>
-            <p className="truncate text-sm font-semibold text-sidebar-accent-foreground">
-              {APP_TITLE}
-            </p>
-          </div>
-        </Link>
+        {collapsed ? (
+          collapseButton
+        ) : (
+          <>
+            <Link
+              to="/"
+              className="flex min-w-0 flex-1 items-center gap-3 rounded outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+            >
+              <AgentNativeIcon
+                aria-hidden="true"
+                className="h-3.5 w-6 shrink-0 text-sidebar-accent-foreground"
+              />
+              <span className="truncate text-sm font-semibold text-sidebar-accent-foreground">
+                {APP_TITLE}
+              </span>
+            </Link>
+            {searchButton}
+            {collapseButton}
+          </>
+        )}
       </div>
 
       <nav
@@ -581,62 +528,19 @@ export function Sidebar({
         )}
       >
         <ChatThreadsSection collapsed={collapsed} />
+        {collapsed ? searchButton : null}
       </nav>
 
-      <div className={cn("mt-auto shrink-0", collapsed && "py-2")}>
-        <nav
-          className={cn(
-            "grid",
-            collapsed ? "gap-0 px-1 py-1" : "gap-1 px-2 py-1",
-          )}
-        >
-          {bottomNavItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = location.pathname.startsWith(item.href);
-            const link = (
-              <Link
-                to={item.href}
-                className={navClass({ isActive })}
-                aria-current={isActive ? "page" : undefined}
-                aria-label={collapsed ? t(item.labelKey) : undefined}
-              >
-                <Icon className="size-4 shrink-0" />
-                <span className={collapsed ? "sr-only" : "truncate"}>
-                  {t(item.labelKey)}
-                </span>
-              </Link>
-            );
-            return collapsed ? (
-              <Tooltip key={item.href}>
-                <TooltipTrigger asChild>{link}</TooltipTrigger>
-                <TooltipContent side="right">{t(item.labelKey)}</TooltipContent>
-              </Tooltip>
-            ) : (
-              <div key={item.href}>{link}</div>
-            );
-          })}
-        </nav>
-
-        <div
-          className={cn(
-            collapsed ? "px-1 py-1 empty:hidden" : "px-3 py-2 empty:hidden",
-          )}
-        >
-          <OrgSwitcher
-            reserveSpace
-            className={
-              collapsed
-                ? "h-8 justify-center px-0 [&>span]:sr-only [&>svg:last-child]:hidden"
-                : undefined
-            }
-          />
-        </div>
-
-        <SidebarFooterActions
-          collapsed={collapsed}
-          feedback={feedbackButton}
-          search={searchButton}
-          collapse={collapseButton}
+      <div className="mt-auto shrink-0 p-2">
+        <OrgSwitcher
+          reserveSpace
+          compact={collapsed}
+          currentAppId="chat"
+          className={
+            collapsed
+              ? "size-8 bg-transparent p-0 hover:bg-sidebar-accent"
+              : "h-11 rounded-lg bg-transparent px-3 py-2 text-sm text-sidebar-accent-foreground hover:bg-sidebar-accent"
+          }
         />
       </div>
     </aside>
