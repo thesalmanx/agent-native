@@ -57,7 +57,9 @@ function subscribeSidebarState(
     window.removeEventListener(SIDEBAR_STATE_CHANGE_EVENT, handleStateChange);
 }
 
-const coreComposerAdapters: Omit<ComposerRuntimeAdapters, "translate"> = {
+type CoreComposerRuntimeAdapters = Omit<ComposerRuntimeAdapters, "translate">;
+
+export const coreComposerAdapters: CoreComposerRuntimeAdapters = {
   resolvePath: (path) => appPath(path),
   models: {
     useChatModels,
