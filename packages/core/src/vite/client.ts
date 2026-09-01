@@ -4202,13 +4202,13 @@ function createAgentNativeConfig(
         },
     optimizeDeps: {
       ...userOptimizeDeps,
-      // A consumer can bound discovery with `entries`, but disabling discovery
-      // entirely leaves CommonJS dependencies reached through the app shell
-      // unconverted. On a clean install that serves the static loading shell
-      // forever because the browser graph never becomes executable. Keep the
-      // framework packages excluded below and let the consumer's focused entry
-      // scan discover only the third-party compatibility seams it actually uses.
-      noDiscovery: userConfig.optimizeDeps?.noDiscovery,
+      // AgentKit's CommonJS compatibility seams are enumerated below. Keep
+      // discovery off once that floor is installed: on a clean hosted runner a
+      // transitive entry scan can keep Vite's optimizer busy after the server
+      // starts accepting requests, leaving the browser on the loading shell.
+      noDiscovery: usesAgentKit
+        ? (userConfig.optimizeDeps?.noDiscovery ?? true)
+        : userConfig.optimizeDeps?.noDiscovery,
       include: [
         ...(usesAgentKit
           ? getAgentKitOptimizeDeps(cwd)

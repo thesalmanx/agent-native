@@ -2761,7 +2761,7 @@ describe("local-core dev aliases and router dedupe", () => {
       expect(include).not.toContain(
         "@agent-native/toolkit/streaming-text-smoothing",
       );
-      expect(config.optimizeDeps?.noDiscovery).toBeUndefined();
+      expect(config.optimizeDeps?.noDiscovery).toBe(true);
       expect(
         include.some((entry) => entry.endsWith("@radix-ui/react-tooltip")),
       ).toBe(false);
