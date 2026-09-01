@@ -37,7 +37,7 @@ const createTransport = vi.hoisted(() =>
 );
 const markHandoff = vi.hoisted(() => vi.fn());
 
-vi.mock("@agent-native/core/client/agent-chat", () => ({
+vi.mock("@agent-native/core/client/agentkit-chat", () => ({
   createAgentNativeAgentKitTransport: createTransport,
   GuidedQuestionFlow: () => null,
   markAgentChatHomeHandoff: markHandoff,

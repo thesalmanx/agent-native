@@ -1,4 +1,4 @@
-import type { ChatThreadSummary } from "@agent-native/core/client/agent-chat";
+import type { ChatThreadSummary } from "@agent-native/core/client/agentkit-chat";
 
 /** Keep genuine history plus accepted submits that have not reached storage yet. */
 export function visibleChatThreads(

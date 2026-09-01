@@ -1,16 +1,13 @@
 import {
-  AgentSidebar,
-  focusAgentChat,
   isAgentChatHomeHandoffActive,
-  navigateWithAgentChatViewTransition,
   useAgentChatHomeHandoff,
   useAgentChatHomeHandoffLinks,
-} from "@agent-native/core/client/agent-chat";
+} from "@agent-native/core/client/agentkit-chat";
 import { useT } from "@agent-native/core/client/i18n";
 import { HeaderActionsProvider } from "@agent-native/toolkit/app-shell";
 import { IconMenu2 } from "@tabler/icons-react";
-import { useState, useEffect } from "react";
-import { useLocation, useNavigate } from "react-router";
+import { lazy, Suspense, useEffect, useState } from "react";
+import { useLocation } from "react-router";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -20,10 +17,17 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { APP_TITLE } from "@/lib/app-config";
-import { TAB_ID } from "@/lib/tab-id";
 
-import { Header } from "./Header";
 import { Sidebar } from "./Sidebar";
+
+const Header = lazy(() =>
+  import("./Header").then((module) => ({ default: module.Header })),
+);
+const AgentInspector = lazy(() =>
+  import("./AgentInspector").then((module) => ({
+    default: module.AgentInspector,
+  })),
+);
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -47,7 +51,6 @@ function routeOwnsToolbar(pathname: string): boolean {
 
 export function Layout({ children }: LayoutProps) {
   const location = useLocation();
-  const navigate = useNavigate();
   const t = useT();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -99,11 +102,6 @@ export function Layout({ children }: LayoutProps) {
   }, [sidebarCollapsed]);
 
   const ownsToolbar = routeOwnsToolbar(location.pathname);
-  function openAskAgentFullscreen() {
-    focusAgentChat();
-    navigateWithAgentChatViewTransition(navigate, "/home");
-  }
-
   const contentFrame = (
     <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
       {isChatRoute ? (
@@ -131,7 +129,9 @@ export function Layout({ children }: LayoutProps) {
           </button>
         </div>
       ) : (
-        <Header onOpenMobileSidebar={() => setMobileSidebarOpen(true)} />
+        <Suspense fallback={<div className="h-12 shrink-0" />}>
+          <Header onOpenMobileSidebar={() => setMobileSidebarOpen(true)} />
+        </Suspense>
       )}
       <main className="agent-native-app-main min-w-0 flex-1 overflow-y-auto overscroll-contain">
         {children}
@@ -173,24 +173,14 @@ export function Layout({ children }: LayoutProps) {
             {contentFrame}
           </div>
         ) : (
-          <AgentSidebar
-            position="right"
-            chatViewTransition
-            chatViewTransitionHandoff={chatHomeHandoffPending}
-            storageKey="chat"
-            browserTabId={TAB_ID}
-            openOnChatRunning={chatHomeHandoffActive}
-            onFullscreenRequest={openAskAgentFullscreen}
-            emptyStateText={t("chat.inspectEmptyState")}
-            agentPageHref="/settings/agent"
-            suggestions={[
-              t("chat.inspectSuggestionCapabilities"),
-              t("chat.inspectSuggestionHello"),
-              t("chat.inspectSuggestionAction"),
-            ]}
-          >
-            {contentFrame}
-          </AgentSidebar>
+          <Suspense fallback={contentFrame}>
+            <AgentInspector
+              chatHomeHandoffActive={chatHomeHandoffActive}
+              chatHomeHandoffPending={chatHomeHandoffPending}
+            >
+              {contentFrame}
+            </AgentInspector>
+          </Suspense>
         )}
       </div>
     </HeaderActionsProvider>

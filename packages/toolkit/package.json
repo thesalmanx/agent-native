@@ -47,6 +47,13 @@
       "import": "./dist/app-shell/*.js",
       "default": "./dist/app-shell/*.js"
     },
+    "./agentkit": {
+      "types": "./dist/agentkit.d.ts",
+      "browser": "./dist/agentkit.js",
+      "development": "./dist/agentkit.js",
+      "import": "./dist/agentkit.js",
+      "default": "./dist/agentkit.js"
+    },
     "./collab-ui": {
       "types": "./dist/collab-ui/index.d.ts",
       "browser": "./dist/collab-ui/index.js",

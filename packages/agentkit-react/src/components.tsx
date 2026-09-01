@@ -16,25 +16,21 @@ import {
   type AgentWidget,
   type RunId,
 } from "@agent-native/agentkit-protocol";
-import { writeClipboardText } from "@agent-native/toolkit/clipboard";
-import {
-  AgentSuggestionBar,
-  agentSuggestionPrompt,
-} from "@agent-native/toolkit/composer/AgentSuggestionBar";
-import { MessageQueueDrawer } from "@agent-native/toolkit/composer/MessageQueueDrawer";
-import {
-  PromptComposer,
-  type PromptComposerFile,
-  type PromptComposerProps,
-} from "@agent-native/toolkit/composer/PromptComposer";
-import type { TiptapComposerHandle } from "@agent-native/toolkit/composer/TiptapComposer";
 import {
   ActionButton,
+  AgentSuggestionBar,
   IconButton,
+  MessageQueueDrawer,
+  PromptComposer,
   Surface,
   TextField,
-} from "@agent-native/toolkit/design-system";
-import { splitMarkdownBlocks } from "@agent-native/toolkit/markdown-block-split";
+  agentSuggestionPrompt,
+  type PromptComposerFile,
+  type PromptComposerProps,
+  type TiptapComposerHandle,
+  splitMarkdownBlocks,
+  writeClipboardText,
+} from "@agent-native/toolkit/agentkit";
 import {
   IconActivity,
   IconAlertCircle,

@@ -13,18 +13,16 @@ import {
 } from "@agent-native/agentkit/react";
 import {
   createAgentNativeAgentKitTransport,
+  CoreComposerRuntimeProvider,
   GuidedQuestionFlow,
-  markAgentChatHomeHandoff,
-  useGuidedQuestionFlow,
-} from "@agent-native/core/client/agent-chat";
-import { CoreComposerRuntimeProvider } from "@agent-native/core/client/composer";
-import { useT } from "@agent-native/core/client/i18n";
-import {
   findMcpConnectionSuggestionIntegration,
+  markAgentChatHomeHandoff,
   McpAgentKitConnectionRequestCard,
   McpAgentKitConnectionResume,
   McpConnectionSuggestion,
-} from "@agent-native/core/client/resources";
+  useGuidedQuestionFlow,
+} from "@agent-native/core/client/agentkit-chat";
+import { useT } from "@agent-native/core/client/i18n";
 import { IconLayoutSidebarRight } from "@tabler/icons-react";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router";

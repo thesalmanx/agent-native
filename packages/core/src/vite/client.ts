@@ -1424,6 +1424,21 @@ function getAgentKitOptimizeDeps(cwd: string): string[] {
     ...(hasDep("@agent-native/agentkit", cwd)
       ? ["@agent-native/agentkit/react"]
       : []),
+    ...(hasDep("@agent-native/toolkit", cwd)
+      ? [
+          "@agent-native/toolkit/agentkit",
+          "@agent-native/toolkit/clipboard",
+          "@agent-native/toolkit/composer/runtime-adapters",
+          "@agent-native/toolkit/markdown-block-split",
+          "@agent-native/toolkit/streaming-text-smoothing",
+          "@agent-native/toolkit/ui/command",
+          "@agent-native/toolkit/ui/cube-loader",
+          "@agent-native/toolkit/ui/dialog",
+          "@agent-native/toolkit/ui/popover",
+          "@agent-native/toolkit/ui/sonner",
+          "@agent-native/toolkit > @radix-ui/react-tooltip",
+        ]
+      : []),
     ...getDefaultOptimizeDeps(cwd).filter(
       (dep) =>
         requiredTransitiveDeps.has(dep) ||
@@ -4191,17 +4206,6 @@ function createAgentNativeConfig(
       // serves stale code even after the source / dist is updated.
       exclude: [
         ...(findCoreSrcDir(cwd) !== null ? CORE_CLIENT_SUBPATHS : []),
-        // AgentKit's compiled entry is small enough to prebundle, but its
-        // Toolkit graph is intentionally broad. Bundling every Toolkit
-        // subpath serializes the first route behind a multi-minute optimizer
-        // pass on resource-constrained hosts. Keep Toolkit as ESM instead;
-        // excluding its package root also prevents late subpath discovery
-        // from replacing the optimizer bundle during the Chat handoff. Keep
-        // Tooltip ESM too: its global provider lives in Core while Toolkit
-        // renders consumers, so optimizing only one side splits Radix context.
-        ...(usesAgentKit && hasDep("@agent-native/toolkit", cwd)
-          ? ["@agent-native/toolkit", "@radix-ui/react-tooltip"]
-          : []),
         // Workspace dependencies resolve to source and must remain outside the
         // optimizer for HMR. Packed or published framework artifacts are not
         // returned here: prebundling those compiled modules is what prevents a

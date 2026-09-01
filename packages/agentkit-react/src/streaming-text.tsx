@@ -4,7 +4,7 @@ import {
   smoothStreamingRevealCount,
   splitStreamingTextGraphemes,
   SMOOTH_STREAMING_COMMIT_INTERVAL_MS,
-} from "@agent-native/toolkit/streaming-text-smoothing";
+} from "@agent-native/toolkit/agentkit";
 import {
   Fragment,
   useCallback,

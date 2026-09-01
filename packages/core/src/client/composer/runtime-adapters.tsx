@@ -1,7 +1,7 @@
 import {
   ComposerRuntimeAdaptersProvider,
   type ComposerRuntimeAdapters,
-} from "@agent-native/toolkit/composer";
+} from "@agent-native/toolkit/composer/runtime-adapters";
 import { useMemo, type ReactNode } from "react";
 
 import {

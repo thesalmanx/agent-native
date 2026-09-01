@@ -238,6 +238,16 @@
       "verification": ["pnpm typecheck"]
     },
     {
+      "id": "toolkit/agentkit",
+      "label": "AgentKit UI facade",
+      "catalog": "toolkit-ui",
+      "catalogItems": ["agentkit"],
+      "entrypoints": ["./agentkit"],
+      "strategy": "protected-seam",
+      "seam": "@agent-native/toolkit/agentkit",
+      "protectedImports": ["@agent-native/toolkit/agentkit"]
+    },
+    {
       "id": "toolkit/conformance",
       "label": "Design system conformance kit",
       "catalog": "toolkit-ui",
