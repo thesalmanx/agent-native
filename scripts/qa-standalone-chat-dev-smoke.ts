@@ -2231,6 +2231,9 @@ function assertCleanServerLogs(logs: string[]): void {
   if (text.includes(nitroUnavailableConsoleLine)) {
     offenders.push("Nitro environment unavailable");
   }
+  if (text.includes("optimized dependencies changed")) {
+    offenders.push("late Vite dependency optimization");
+  }
   if (hasAuthLockFailure(logs))
     offenders.push("auth init failure (app locked)");
   const exceptionLines = text
@@ -2246,8 +2249,7 @@ function assertCleanServerLogs(logs: string[]): void {
       (line) =>
         !line.includes(nitroUnavailableConsoleLine) &&
         !line.includes("Deterministic incomplete provider stream") &&
-        !line.includes("Vite environment") &&
-        !line.includes("optimized dependencies changed"),
+        !line.includes("Vite environment"),
     );
   offenders.push(...exceptionLines.slice(0, 12));
   assert.deepEqual(

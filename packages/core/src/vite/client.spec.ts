@@ -2747,6 +2747,15 @@ describe("local-core dev aliases and router dedupe", () => {
         (config.optimizeDeps as { include?: string[] } | undefined)?.include ??
         [];
       expect(include).toContain("@agent-native/agentkit/react");
+      expect(include).toEqual(
+        expect.arrayContaining([
+          "@agent-native/toolkit/composer",
+          "@agent-native/toolkit/editor/SharedRichEditor",
+          "@agent-native/toolkit/streaming-text-smoothing",
+          "@agent-native/toolkit/ui/dialog",
+          "@agent-native/toolkit/ui/popover",
+        ]),
+      );
       expect(include).not.toContain("@agent-native/core");
       expect(include).not.toContain("@excalidraw/excalidraw");
       expect(include).not.toContain("mermaid");

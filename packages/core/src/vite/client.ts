@@ -1379,6 +1379,37 @@ function getDefaultOptimizeDeps(cwd: string): string[] {
 }
 
 function getAgentKitOptimizeDeps(cwd: string): string[] {
+  // Vite's entry scan stops at package boundaries. AgentKit's compiled Chat
+  // graph imports these Toolkit subpaths transitively, so they otherwise appear
+  // only after the first authenticated route renders. That late discovery
+  // replaces the optimizer bundle and reloads the client-only shell mid-handoff.
+  const chatToolkitEntries = [
+    "@agent-native/toolkit/clipboard",
+    "@agent-native/toolkit/composer",
+    "@agent-native/toolkit/composer/PastedTextChip",
+    "@agent-native/toolkit/composer/attachment-accept",
+    "@agent-native/toolkit/composer/model-selection",
+    "@agent-native/toolkit/composer/pasted-text",
+    "@agent-native/toolkit/composer/realtime-voice-transcript",
+    "@agent-native/toolkit/editor/SharedRichEditor",
+    "@agent-native/toolkit/markdown-block-split",
+    "@agent-native/toolkit/sharing",
+    "@agent-native/toolkit/streaming-text-smoothing",
+    "@agent-native/toolkit/ui/alert-dialog",
+    "@agent-native/toolkit/ui/avatar",
+    "@agent-native/toolkit/ui/badge",
+    "@agent-native/toolkit/ui/checkbox",
+    "@agent-native/toolkit/ui/command",
+    "@agent-native/toolkit/ui/cube-loader",
+    "@agent-native/toolkit/ui/dialog",
+    "@agent-native/toolkit/ui/pagination",
+    "@agent-native/toolkit/ui/popover",
+    "@agent-native/toolkit/ui/select",
+    "@agent-native/toolkit/ui/sonner",
+    "@agent-native/toolkit/ui/spinner",
+    "@agent-native/toolkit/ui/switch",
+    "@agent-native/toolkit/ui/textarea",
+  ];
   const requiredTransitiveDeps = new Set([
     "@agent-native/core > @assistant-ui/react",
     "@agent-native/core > @assistant-ui/react-markdown",
@@ -1424,6 +1455,7 @@ function getAgentKitOptimizeDeps(cwd: string): string[] {
     ...(hasDep("@agent-native/agentkit", cwd)
       ? ["@agent-native/agentkit/react"]
       : []),
+    ...(hasDep("@agent-native/toolkit", cwd) ? chatToolkitEntries : []),
     ...getDefaultOptimizeDeps(cwd).filter(
       (dep) =>
         requiredTransitiveDeps.has(dep) ||
