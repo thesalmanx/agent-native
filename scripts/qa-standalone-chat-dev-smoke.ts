@@ -2260,6 +2260,12 @@ async function runBrowserSmoke(
   // Warmup covers `/` + auto-login + Vite quiet + authenticated session.
   log("warmup: auto-login, Vite dep quiet, authenticated /");
   await waitForAuthenticatedShell(page, baseUrl, running);
+  const durableThreadPath = new URL(page.url()).pathname;
+  assert.match(
+    durableThreadPath,
+    /^\/chat\/chat-[^/]+$/,
+    "authenticated warmup must establish a durable Chat thread",
+  );
 
   log("warmup: /agent dependencies and Vite dep quiet");
   await gotoAndWaitForAgentPage(
@@ -2286,8 +2292,14 @@ async function runBrowserSmoke(
   assert.deepEqual(browserErrors, [], "browser console/page errors");
   assert.deepEqual(httpErrors, [], "browser HTTP errors on app origin");
 
-  log("assertion pass: / (Chat surface) after /agent");
-  await gotoAndWaitForChatPage(page, running, "/", browserErrors, httpErrors);
+  log("assertion pass: durable Chat surface after /agent");
+  await gotoAndWaitForChatPage(
+    page,
+    running,
+    durableThreadPath,
+    browserErrors,
+    httpErrors,
+  );
 
   log("acceptance: real AgentKit loopback lifecycle");
   await assertAgentKitChatAcceptance(page, provider, network);
