@@ -1386,56 +1386,36 @@ function getDefaultOptimizeDeps(cwd: string): string[] {
 }
 
 function getAgentKitOptimizeDeps(cwd: string): string[] {
-  const requiredTransitiveDeps = new Set([
-    "@agent-native/core > @assistant-ui/react",
-    "@agent-native/core > @assistant-ui/react-markdown",
-    "@agent-native/core > @assistant-ui/store",
-    "@agent-native/core > @assistant-ui/tap",
-    "@agent-native/core > @assistant-ui/react > assistant-stream",
-    "@agent-native/core > @assistant-ui/react > assistant-stream/utils",
-    "zustand",
-    "zustand/react",
-    "zustand/shallow",
-    "zustand/traditional",
-    "zustand/vanilla",
-    "use-sync-external-store/shim/index.js",
-    "use-sync-external-store/shim/with-selector.js",
-    "@agent-native/core > react-markdown",
-    "@agent-native/core > react-i18next",
-    "@agent-native/toolkit > @tiptap/react > use-sync-external-store/shim/index.js",
-    "@agent-native/toolkit > @tiptap/react > use-sync-external-store/shim/with-selector.js",
-    "@agent-native/toolkit > tiptap-markdown > markdown-it-task-lists",
-    "@tabler/icons-react",
-    "@tanstack/react-query",
-    "clsx",
-    "next-themes",
-    "react-router",
-    "react-router/dom",
-    "recharts",
-    "@agent-native/core > lowlight",
-    "@agent-native/core > remark-gfm",
-    "sonner",
-    "tailwind-merge",
-    "zod",
-  ]);
-
-  // Framework packages stay as ESM, while this deliberately small set covers
-  // the CommonJS entry points used by the Chat surface. Direct app imports are
-  // still discovered normally by Vite without pulling every Core product
-  // surface into the cold-start bundle.
+  // AgentKit, Core, and Toolkit stay as ESM. Prebundle only React's shared
+  // singleton and the CommonJS seams reached from the excluded Toolkit graph;
+  // Vite discovers direct app dependencies from the route itself. Eagerly
+  // including Core's assistant-ui, syntax-highlighting, charting, and state
+  // graphs made a cold generated Chat spend minutes optimizing modules it does
+  // not render.
   return [
     ...(hasDep("react", cwd) ? ["react"] : []),
     ...(hasDep("react-dom", cwd)
       ? ["react-dom", "react-dom/client", "react-dom/server"]
       : []),
-    ...(hasDep("@agent-native/toolkit", cwd)
-      ? ["@agent-native/toolkit > @radix-ui/react-tooltip"]
+    "@agent-native/core > @assistant-ui/react",
+    "@agent-native/core > @assistant-ui/react > assistant-stream",
+    "@agent-native/core > @assistant-ui/react > assistant-stream/utils",
+    "@agent-native/core > react-markdown",
+    "@agent-native/core > react-markdown > void-elements",
+    ...(hasDep("zustand", cwd)
+      ? ["zustand", "zustand/shallow", "zustand/traditional", "zustand/vanilla"]
       : []),
-    ...getDefaultOptimizeDeps(cwd).filter(
-      (dep) =>
-        requiredTransitiveDeps.has(dep) ||
-        dep.startsWith("@agent-native/core > highlight.js/"),
-    ),
+    ...(hasDep("clsx", cwd) ? ["clsx"] : []),
+    ...(hasDep("tailwind-merge", cwd) ? ["tailwind-merge"] : []),
+    ...(hasDep("recharts", cwd) ? ["recharts"] : []),
+    ...(hasDep("@agent-native/toolkit", cwd)
+      ? [
+          "@agent-native/toolkit > @radix-ui/react-tooltip",
+          "@agent-native/toolkit > @tiptap/react > use-sync-external-store/shim/index.js",
+          "@agent-native/toolkit > @tiptap/react > use-sync-external-store/shim/with-selector.js",
+          "@agent-native/toolkit > tiptap-markdown > markdown-it-task-lists",
+        ]
+      : []),
   ];
 }
 
