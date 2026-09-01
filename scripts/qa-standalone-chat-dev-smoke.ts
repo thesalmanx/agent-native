@@ -962,18 +962,10 @@ function isBenignHttpError(
   return false;
 }
 
-interface WaitForHomeLinkOptions {
-  baseUrl?: string;
-  /** Only safe after Vite deps are quiet — re-goto races active reloads. */
-  renavigateOnTimeout?: boolean;
-}
-
 async function waitForHomeLink(
   page: Page,
   timeoutMs = shellTimeoutMs,
-  options: WaitForHomeLinkOptions = {},
 ): Promise<void> {
-  const { baseUrl, renavigateOnTimeout = false } = options;
   const homeLink = page.getByRole("button", { name: /^New Chat$/i });
   const deadline = Date.now() + timeoutMs;
 
@@ -991,16 +983,6 @@ async function waitForHomeLink(
       return;
     } catch (err) {
       if (Date.now() >= deadline) break;
-      if (
-        renavigateOnTimeout &&
-        baseUrl &&
-        err instanceof Error &&
-        err.message.includes("Timeout")
-      ) {
-        await gotoCommitted(page, `${baseUrl}/`);
-        await sleep(1_000);
-        continue;
-      }
       if (isNavigationContextError(err)) {
         await sleep(1_000);
         continue;
@@ -1180,10 +1162,6 @@ async function waitForAuthenticatedShell(
   await waitForHomeLink(
     page,
     Math.max(isCi ? 60_000 : 15_000, shellDeadline - Date.now()),
-    {
-      baseUrl,
-      renavigateOnTimeout: true,
-    },
   );
 
   const sessionEmail = await readAuthenticatedSessionEmail(page, baseUrl);
@@ -1191,10 +1169,10 @@ async function waitForAuthenticatedShell(
 
   log(`navigating to ${baseUrl}/ (public shell handoff)`);
   await gotoCommitted(page, `${baseUrl}/`);
-  await waitForHomeLink(page, shellTimeoutMs, {
-    baseUrl,
-    renavigateOnTimeout: true,
-  });
+  // A cold durable handoff can take longer than a locator poll. Re-navigating
+  // here aborts the in-flight action and starts another thread creation, so
+  // wait on the one navigation we deliberately initiated above.
+  await waitForHomeLink(page, shellTimeoutMs);
   await page.waitForURL(/\/chat\/chat-[^/]+$/, { timeout: shellTimeoutMs });
   assert.match(
     new URL(page.url()).pathname,
