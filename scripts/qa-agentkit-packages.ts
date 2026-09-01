@@ -110,11 +110,16 @@ function write(relativePath: string, contents: string): void {
   fs.writeFileSync(target, contents);
 }
 
-function spawnPackageManager(
-  args: string[],
-  options: Parameters<typeof spawn>[2],
-): ChildProcess {
-  return spawn(pnpmCommand, [...pnpmPrefixArgs, ...args], options);
+function signalProcessTree(child: ChildProcess, signal: NodeJS.Signals): void {
+  if (child.pid && process.platform !== "win32") {
+    try {
+      process.kill(-child.pid, signal);
+      return;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+    }
+  }
+  child.kill(signal);
 }
 
 async function runPackageManager(
@@ -298,23 +303,36 @@ process.exit(0);
     label: "build packed React and CSS consumer",
   });
 
-  const preview = spawnPackageManager(["run", "start"], {
-    cwd: consumerDir,
-    env: { ...process.env, NO_COLOR: "1" },
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+  const preview = spawn(
+    process.execPath,
+    [
+      path.join(consumerDir, "node_modules/vite/bin/vite.js"),
+      "preview",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "9476",
+      "--strictPort",
+    ],
+    {
+      cwd: consumerDir,
+      env: { ...process.env, NO_COLOR: "1" },
+      stdio: ["ignore", "pipe", "pipe"],
+      detached: process.platform !== "win32",
+    },
+  );
   preview.stdout.pipe(process.stdout);
   preview.stderr.pipe(process.stderr);
   try {
     await waitForUrl("http://127.0.0.1:9476", preview);
   } finally {
     if (preview.exitCode === null && preview.signalCode === null) {
-      preview.kill("SIGTERM");
+      signalProcessTree(preview, "SIGTERM");
       await Promise.race([
         new Promise<void>((resolve) => preview.once("close", () => resolve())),
         sleep(5_000).then(() => {
           if (preview.exitCode === null && preview.signalCode === null) {
-            preview.kill("SIGKILL");
+            signalProcessTree(preview, "SIGKILL");
           }
         }),
       ]);
