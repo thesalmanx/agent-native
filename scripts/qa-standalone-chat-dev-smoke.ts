@@ -275,8 +275,11 @@ function installAcceptanceTransportFixture(): void {
   );
   fs.copyFileSync(acceptanceTransportFixture, fixtureTarget);
 
-  const routePath = path.join(appDir, "app/routes/home.tsx");
-  const source = fs.readFileSync(routePath, "utf8");
+  const chatSurfacePath = path.join(
+    appDir,
+    "app/components/chat/ChatRouteContent.tsx",
+  );
+  const source = fs.readFileSync(chatSurfacePath, "utf8");
   if (source.includes("instrumentAgentKitAcceptanceTransport(")) return;
   const importAnchor = 'import { TAB_ID } from "@/lib/tab-id";';
   const transportAnchor = "    createAgentNativeAgentKitTransport({";
@@ -284,20 +287,20 @@ function installAcceptanceTransportFixture(): void {
   assert.equal(
     source.split(importAnchor).length - 1,
     1,
-    "generated Chat route import anchor changed",
+    "generated Chat surface import anchor changed",
   );
   assert.equal(
     source.split(transportAnchor).length - 1,
     1,
-    "generated Chat transport anchor changed",
+    "generated Chat surface transport anchor changed",
   );
   assert.equal(
     source.split(closeAnchor).length - 1,
     1,
-    "generated Chat transport close anchor changed",
+    "generated Chat surface transport close anchor changed",
   );
   fs.writeFileSync(
-    routePath,
+    chatSurfacePath,
     source
       .replace(
         importAnchor,

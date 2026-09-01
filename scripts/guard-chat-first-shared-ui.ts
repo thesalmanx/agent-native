@@ -23,12 +23,15 @@ const violations = roots.flatMap((root) => {
 });
 
 const chatSidebarPath = "templates/chat/app/components/layout/Sidebar.tsx";
+const chatRoutePath = "templates/chat/app/routes/home.tsx";
 let chatSidebar: string;
+let chatRoute: string;
 try {
   chatSidebar = readFileSync(chatSidebarPath, "utf8");
+  chatRoute = readFileSync(chatRoutePath, "utf8");
 } catch (error) {
   throw new Error(
-    `[guard:chat-first-shared-ui] Unable to read ${chatSidebarPath}`,
+    `[guard:chat-first-shared-ui] Unable to read the Chat template contract files`,
     { cause: error },
   );
 }
@@ -49,7 +52,22 @@ const chatRailViolations = [
     : null,
 ].filter((violation): violation is string => Boolean(violation));
 
-if (violations.length > 0 || chatRailViolations.length > 0) {
+const chatRouteViolations = [
+  chatRoute.includes("@agent-native/agentkit") ||
+  chatRoute.includes("@agent-native/core/client/agentkit-chat")
+    ? "Chat route modules must not eagerly evaluate the AgentKit client graph in the server build"
+    : null,
+  !chatRoute.includes("lazy(") ||
+  !chatRoute.includes('import("@/components/chat/ChatRouteContent")')
+    ? "Chat route modules must defer the interactive Chat surface until client rendering"
+    : null,
+].filter((violation): violation is string => Boolean(violation));
+
+if (
+  violations.length > 0 ||
+  chatRailViolations.length > 0 ||
+  chatRouteViolations.length > 0
+) {
   console.error(
     [
       violations.length > 0
@@ -57,6 +75,9 @@ if (violations.length > 0 || chatRailViolations.length > 0) {
         : null,
       chatRailViolations.length > 0
         ? `Chat rail contract violation(s):\n${chatRailViolations.map((violation) => `- ${violation}`).join("\n")}`
+        : null,
+      chatRouteViolations.length > 0
+        ? `Chat route contract violation(s):\n${chatRouteViolations.map((violation) => `- ${violation}`).join("\n")}`
         : null,
     ]
       .filter(Boolean)
