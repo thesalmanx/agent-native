@@ -37,6 +37,10 @@ const createTransport = vi.hoisted(() =>
 );
 const markHandoff = vi.hoisted(() => vi.fn());
 
+vi.mock("@agent-native/core/client/agentkit-chat/rail", () => ({
+  markAgentChatHomeHandoff: markHandoff,
+}));
+
 vi.mock("@agent-native/core/client/agentkit-chat", () => ({
   CoreComposerRuntimeProvider: ({
     children,
@@ -111,6 +115,8 @@ vi.mock("@/components/ui/tooltip", () => ({
 }));
 
 import ChatRoute from "@/components/chat/ChatRouteContent";
+
+import ChatHomeRoute from "./home";
 
 describe("ChatRoute AgentKit surface", () => {
   let container: HTMLDivElement;
@@ -208,23 +214,16 @@ describe("ChatRoute AgentKit surface", () => {
   });
 
   it("does not mount the Chat runtime before the durable route settles", () => {
-    act(() => root.render(<ChatRoute />));
+    act(() => root.render(<ChatHomeRoute />));
 
     expect(createTransport).not.toHaveBeenCalled();
     expect(routeState.rootProps).toBeNull();
     expect(container.querySelector('[aria-busy="true"]')).not.toBeNull();
-
-    act(() => {
-      window.dispatchEvent(
-        new CustomEvent("agent-chat:open-thread", {
-          detail: { threadId: "thread-new", newThread: true },
-        }),
-      );
-    });
-
-    expect(routeState.navigate).toHaveBeenLastCalledWith("/chat/thread-new", {
-      replace: true,
-    });
+    expect(routeState.navigate).toHaveBeenLastCalledWith(
+      expect.stringMatching(/^\/chat\/chat-/),
+      { replace: true },
+    );
+    expect(markHandoff).toHaveBeenCalledWith("chat");
   });
 
   it("enters durable chat mode and exposes the workspace toolbar", () => {

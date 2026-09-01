@@ -24,17 +24,20 @@ const violations = roots.flatMap((root) => {
 
 const chatSidebarPath = "templates/chat/app/components/layout/Sidebar.tsx";
 const chatLayoutPath = "templates/chat/app/components/layout/Layout.tsx";
-const chatRoutePath = "templates/chat/app/routes/home.tsx";
+const chatHomeRoutePath = "templates/chat/app/routes/home.tsx";
+const chatThreadRoutePath = "templates/chat/app/routes/chat.$threadId.tsx";
 const chatToolkitProviderPath =
   "templates/chat/app/components/ui/toolkit-provider.tsx";
 let chatSidebar: string;
 let chatLayout: string;
-let chatRoute: string;
+let chatHomeRoute: string;
+let chatThreadRoute: string;
 let chatToolkitProvider: string;
 try {
   chatSidebar = readFileSync(chatSidebarPath, "utf8");
   chatLayout = readFileSync(chatLayoutPath, "utf8");
-  chatRoute = readFileSync(chatRoutePath, "utf8");
+  chatHomeRoute = readFileSync(chatHomeRoutePath, "utf8");
+  chatThreadRoute = readFileSync(chatThreadRoutePath, "utf8");
   chatToolkitProvider = readFileSync(chatToolkitProviderPath, "utf8");
 } catch (error) {
   throw new Error(
@@ -60,13 +63,17 @@ const chatRailViolations = [
 ].filter((violation): violation is string => Boolean(violation));
 
 const chatRouteViolations = [
-  chatRoute.includes("@agent-native/agentkit") ||
-  chatRoute.includes("@agent-native/core/client/agentkit-chat")
-    ? "Chat route modules must not eagerly evaluate the AgentKit client graph in the server build"
+  chatHomeRoute.includes("ChatRouteContent") ||
+  chatHomeRoute.includes("@agent-native/agentkit") ||
+  chatHomeRoute.includes('from "@agent-native/core/client/agentkit-chat"')
+    ? "Chat /home must remain a handoff-only module and never evaluate the AgentKit client graph"
     : null,
-  !chatRoute.includes("lazy(") ||
-  !chatRoute.includes('import("@/components/chat/ChatRouteContent")')
-    ? "Chat route modules must defer the interactive Chat surface until client rendering"
+  !chatHomeRoute.includes("navigate(`/chat/")
+    ? "Chat /home must settle a durable thread URL before the runtime can mount"
+    : null,
+  !chatThreadRoute.includes("lazy(") ||
+  !chatThreadRoute.includes('import("@/components/chat/ChatRouteContent")')
+    ? "Chat /chat/:threadId must defer the interactive Chat surface until client rendering"
     : null,
 ].filter((violation): violation is string => Boolean(violation));
 

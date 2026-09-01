@@ -107,6 +107,8 @@
 .dark {
   --agent-kit-composer-border-opacity: 0;
   --agent-kit-composer-focus-border-opacity: 0;
+  --agent-kit-composer-border-color: transparent;
+  --agent-kit-composer-focus-border-color: transparent;
   --agent-kit-shadow-color: var(--background);
   --agent-kit-control-elevation: 0 0.0625rem 0.125rem
     hsl(var(--agent-kit-shadow-color) / 0.18);

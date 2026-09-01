@@ -1,10 +1,8 @@
-import { lazy, Suspense } from "react";
+import { markAgentChatHomeHandoff } from "@agent-native/core/client/agentkit-chat/rail";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router";
 
 import { APP_TITLE } from "@/lib/app-config";
-
-const ChatRouteContent = lazy(
-  () => import("@/components/chat/ChatRouteContent"),
-);
 
 const SEO_TITLE = `${APP_TITLE} - Open Source AI app starter with actions`;
 const SEO_DESCRIPTION =
@@ -25,21 +23,17 @@ export function meta() {
   ];
 }
 
-function ChatRouteFallback() {
-  return (
-    <div
-      aria-hidden="true"
-      className="flex h-full min-h-0 items-end justify-center overflow-hidden bg-background px-4 pb-4"
-    >
-      <div className="h-28 w-full max-w-3xl animate-pulse rounded-3xl bg-muted/40" />
-    </div>
-  );
-}
-
 export default function ChatRoute() {
-  return (
-    <Suspense fallback={<ChatRouteFallback />}>
-      <ChatRouteContent />
-    </Suspense>
+  const navigate = useNavigate();
+  const [threadId] = useState(
+    () =>
+      `chat-${typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36)}`,
   );
+
+  useEffect(() => {
+    markAgentChatHomeHandoff("chat");
+    navigate(`/chat/${encodeURIComponent(threadId)}`, { replace: true });
+  }, [navigate, threadId]);
+
+  return <div aria-busy="true" className="h-full min-h-0 bg-background" />;
 }

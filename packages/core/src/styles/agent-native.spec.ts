@@ -227,6 +227,9 @@ describe("agent-native shell surface tokens", () => {
     expect(tokens).toMatch(
       /\.dark\s*\{[\s\S]*?--agent-kit-composer-border-opacity: 0;[\s\S]*?--agent-kit-composer-focus-border-opacity: 0;/s,
     );
+    expect(tokens).toMatch(
+      /\.dark\s*\{[\s\S]*?--agent-kit-composer-border-color: transparent;[\s\S]*?--agent-kit-composer-focus-border-color: transparent;/s,
+    );
   });
 
   it("keeps the active tool shine clipped to its label text", () => {

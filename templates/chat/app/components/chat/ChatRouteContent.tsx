@@ -43,43 +43,10 @@ function chatThreadPath(threadId: string | null) {
 export default function ChatRouteContent() {
   const { threadId } = useParams();
   const navigate = useNavigate();
-  const [homeThreadId, setHomeThreadId] = useState(
-    () =>
-      `chat-${typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36)}`,
-  );
-  useEffect(() => {
-    const handleOpenThread = (event: Event) => {
-      const detail = (
-        event as CustomEvent<{ threadId?: unknown; newThread?: unknown }>
-      ).detail;
-      if (detail?.newThread !== true || typeof detail.threadId !== "string") {
-        return;
-      }
-      setHomeThreadId(detail.threadId);
-    };
-    window.addEventListener("agent-chat:open-thread", handleOpenThread);
-    return () =>
-      window.removeEventListener("agent-chat:open-thread", handleOpenThread);
-  }, []);
 
-  useEffect(() => {
-    if (threadId) return;
-    markAgentChatHomeHandoff("chat");
-    navigate(chatThreadPath(homeThreadId), { replace: true });
-  }, [homeThreadId, navigate, threadId]);
-
-  // `/home` is only the authenticated handoff route. Mounting AgentKit here
-  // starts thread requests and lazy composer imports that the immediate route
-  // replacement then aborts. On a cold Vite server those cancelled module
-  // requests can be mistaken for optimizer failures and trigger a reload loop.
-  // Let the durable URL settle before starting any Chat runtime work.
-  if (!threadId) return <ChatRouteHandoff />;
+  if (!threadId) return null;
 
   return <ChatThreadRouteContent threadId={threadId} navigate={navigate} />;
-}
-
-function ChatRouteHandoff() {
-  return <div aria-busy="true" className="h-full min-h-0 bg-background" />;
 }
 
 function ChatThreadRouteContent({
