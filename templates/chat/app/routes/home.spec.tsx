@@ -38,9 +38,18 @@ const createTransport = vi.hoisted(() =>
 const markHandoff = vi.hoisted(() => vi.fn());
 
 vi.mock("@agent-native/core/client/agentkit-chat", () => ({
+  CoreComposerRuntimeProvider: ({
+    children,
+  }: {
+    children: React.ReactNode;
+  }) => <div data-core-composer-runtime="">{children}</div>,
   createAgentNativeAgentKitTransport: createTransport,
+  findMcpConnectionSuggestionIntegration: () => null,
   GuidedQuestionFlow: () => null,
   markAgentChatHomeHandoff: markHandoff,
+  McpAgentKitConnectionRequestCard: () => null,
+  McpAgentKitConnectionResume: () => null,
+  McpConnectionSuggestion: () => null,
   useGuidedQuestionFlow: () => ({
     questions: null,
     handleSubmit: vi.fn(),
@@ -84,14 +93,6 @@ vi.mock("@agent-native/core/client/i18n", () => ({
   useT: () => (key: string) => key,
 }));
 
-vi.mock("@agent-native/core/client/composer", () => ({
-  CoreComposerRuntimeProvider: ({
-    children,
-  }: {
-    children: React.ReactNode;
-  }) => <div data-core-composer-runtime="">{children}</div>,
-}));
-
 vi.mock("react-router", () => ({
   useNavigate: () => routeState.navigate,
   useParams: () => ({ threadId: routeState.threadId }),
@@ -109,7 +110,7 @@ vi.mock("@/components/ui/tooltip", () => ({
   ),
 }));
 
-import ChatRoute from "./home";
+import ChatRoute from "@/components/chat/ChatRouteContent";
 
 describe("ChatRoute AgentKit surface", () => {
   let container: HTMLDivElement;
@@ -141,6 +142,7 @@ describe("ChatRoute AgentKit surface", () => {
   });
 
   it("mounts the real Agent-Native transport into AgentKit", () => {
+    routeState.threadId = "thread-one";
     act(() => root.render(<ChatRoute />));
 
     expect(createTransport).toHaveBeenCalledWith(
@@ -205,8 +207,12 @@ describe("ChatRoute AgentKit surface", () => {
     });
   });
 
-  it("switches the home composer to the new thread before navigation paints", () => {
+  it("does not mount the Chat runtime before the durable route settles", () => {
     act(() => root.render(<ChatRoute />));
+
+    expect(createTransport).not.toHaveBeenCalled();
+    expect(routeState.rootProps).toBeNull();
+    expect(container.querySelector('[aria-busy="true"]')).not.toBeNull();
 
     act(() => {
       window.dispatchEvent(
@@ -216,10 +222,13 @@ describe("ChatRoute AgentKit surface", () => {
       );
     });
 
-    expect(routeState.rootProps?.threadId).toBe("thread-new");
+    expect(routeState.navigate).toHaveBeenLastCalledWith("/chat/thread-new", {
+      replace: true,
+    });
   });
 
   it("enters durable chat mode and exposes the workspace toolbar", () => {
+    routeState.threadId = "thread-one";
     routeState.messages = [{ id: "user-1" }];
     routeState.title = "Release review";
 
@@ -234,11 +243,7 @@ describe("ChatRoute AgentKit surface", () => {
     expect(routeState.chatProps?.title).toBe("Release review");
     expect(toggle).not.toBeNull();
     expect(panel?.dataset.state).toBe("closed");
-    expect(markHandoff).toHaveBeenCalledWith("chat");
-    expect(routeState.navigate).toHaveBeenCalledWith(
-      expect.stringMatching(/^\/chat\/chat-/),
-      { replace: true },
-    );
+    expect(markHandoff).not.toHaveBeenCalled();
 
     act(() => toggle?.click());
     expect(panel?.dataset.state).toBe("open");

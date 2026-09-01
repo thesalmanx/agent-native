@@ -43,21 +43,10 @@ function chatThreadPath(threadId: string | null) {
 export default function ChatRouteContent() {
   const { threadId } = useParams();
   const navigate = useNavigate();
-  const t = useT();
-  const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [homeThreadId, setHomeThreadId] = useState(
     () =>
       `chat-${typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36)}`,
   );
-  const resolvedThreadId = threadId ?? homeThreadId;
-  const [transport] = useState(() =>
-    createAgentNativeAgentKitTransport({
-      browserTabId: TAB_ID,
-      surface: "app",
-      adapter: { textFormat: "markdown" },
-    }),
-  );
-
   useEffect(() => {
     const handleOpenThread = (event: Event) => {
       const detail = (
@@ -79,6 +68,37 @@ export default function ChatRouteContent() {
     navigate(chatThreadPath(homeThreadId), { replace: true });
   }, [homeThreadId, navigate, threadId]);
 
+  // `/home` is only the authenticated handoff route. Mounting AgentKit here
+  // starts thread requests and lazy composer imports that the immediate route
+  // replacement then aborts. On a cold Vite server those cancelled module
+  // requests can be mistaken for optimizer failures and trigger a reload loop.
+  // Let the durable URL settle before starting any Chat runtime work.
+  if (!threadId) return <ChatRouteHandoff />;
+
+  return <ChatThreadRouteContent threadId={threadId} navigate={navigate} />;
+}
+
+function ChatRouteHandoff() {
+  return <div aria-busy="true" className="h-full min-h-0 bg-background" />;
+}
+
+function ChatThreadRouteContent({
+  threadId,
+  navigate,
+}: {
+  threadId: string;
+  navigate: ReturnType<typeof useNavigate>;
+}) {
+  const t = useT();
+  const [workspaceOpen, setWorkspaceOpen] = useState(false);
+  const [transport] = useState(() =>
+    createAgentNativeAgentKitTransport({
+      browserTabId: TAB_ID,
+      surface: "app",
+      adapter: { textFormat: "markdown" },
+    }),
+  );
+
   return (
     <div
       className="relative flex h-full min-h-0 overflow-hidden bg-background"
@@ -96,7 +116,7 @@ export default function ChatRouteContent() {
               transportOwnership: "owned",
               retainActiveRunsOnThreadRelease: true,
             }}
-            threadId={resolvedThreadId}
+            threadId={threadId}
             labels={{ composerPlaceholder: t("chat.composerPlaceholder") }}
             slots={{
               emptyState: ChatEmptyState,
@@ -109,7 +129,7 @@ export default function ChatRouteContent() {
             <ChatMcpConnectionResume />
             <ChatCanvas
               routeThreadId={threadId}
-              resolvedThreadId={resolvedThreadId}
+              resolvedThreadId={threadId}
               workspaceOpen={workspaceOpen}
               setWorkspaceOpen={setWorkspaceOpen}
               navigate={navigate}
