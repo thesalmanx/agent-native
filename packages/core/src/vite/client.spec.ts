@@ -2676,6 +2676,43 @@ describe("local-core dev aliases and router dedupe", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
+  it("serves the AgentKit client graph as ESM instead of blocking cold routes on prebundling", () => {
+    const previousCwd = process.cwd();
+    const tmpDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "an-vite-agentkit-esm-"),
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, "package.json"),
+      JSON.stringify({
+        dependencies: {
+          "@agent-native/agentkit": "^0.1.0",
+          "@agent-native/agentkit-react": "^0.1.0",
+          "@agent-native/core": "^0.176.0",
+          "@agent-native/toolkit": "^0.19.0",
+        },
+      }),
+    );
+
+    try {
+      process.chdir(tmpDir);
+      const config = defineConfig();
+      const exclude =
+        (config.optimizeDeps as { exclude?: string[] } | undefined)?.exclude ??
+        [];
+
+      expect(exclude).toEqual(
+        expect.arrayContaining([
+          "@agent-native/agentkit",
+          "@agent-native/agentkit-react",
+          "@agent-native/toolkit",
+        ]),
+      );
+    } finally {
+      process.chdir(previousCwd);
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
   it("excludes and aliases the i18n subpath when local core source is active", () => {
     const previousCwd = process.cwd();
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "an-vite-i18n-src-"));

@@ -1107,6 +1107,16 @@ const CORE_CLIENT_SUBPATHS = [
   "@agent-native/core/voice",
 ];
 
+// AgentKit's React package reaches Toolkit through a wide ESM graph. Vite's
+// optimizer serializes the first route request behind that graph on cold,
+// resource-constrained machines; serving the framework packages as ESM keeps
+// the request responsive while their third-party dependencies remain bundled.
+const AGENTKIT_CLIENT_PACKAGE_ROOTS = [
+  "@agent-native/agentkit",
+  "@agent-native/agentkit-react",
+  "@agent-native/toolkit",
+];
+
 const NODE_SSR_NATIVE_EXTERNALS = ["better-sqlite3", "bindings"];
 
 /**
@@ -4059,6 +4069,9 @@ function createAgentNativeConfig(
       // serves stale code even after the source / dist is updated.
       exclude: [
         ...(findCoreSrcDir(cwd) !== null ? CORE_CLIENT_SUBPATHS : []),
+        ...(hasDep("@agent-native/agentkit", cwd)
+          ? AGENTKIT_CLIENT_PACKAGE_ROOTS
+          : []),
         ...(userConfig.optimizeDeps?.exclude ?? []),
         ...(options.optimizeDeps?.exclude ?? []),
       ],
