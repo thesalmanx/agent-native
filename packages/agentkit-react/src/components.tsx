@@ -2060,7 +2060,7 @@ export function AgentKitComposer({
         submitting={command.pending}
         willQueue={active && queueWhileRunning && capabilities.messageQueue}
         showModelSelector={
-          showModelSelector && Boolean(capabilities.modelSelection)
+          showModelSelector && capabilities.modelSelection !== false
         }
         attachmentsEnabled={Boolean(capabilities.uploads)}
         slashCommands={slashCommands}

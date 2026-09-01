@@ -4,7 +4,7 @@ import {
   useAgentChatRunningThreads,
   useChatThreads,
   type ChatThreadSummary,
-} from "@agent-native/core/client/agentkit-chat";
+} from "@agent-native/core/client/agentkit-chat/rail";
 import { useT } from "@agent-native/core/client/i18n";
 import { openCommandMenu } from "@agent-native/core/client/navigation";
 import { OrgSwitcher } from "@agent-native/core/client/org-switcher";
@@ -12,7 +12,7 @@ import {
   ChatHistoryList,
   type ChatHistoryItem,
   type ChatHistorySection,
-} from "@agent-native/toolkit/chat-history";
+} from "@agent-native/toolkit/chat-history/ChatHistoryList";
 import {
   IconApps,
   IconClock,

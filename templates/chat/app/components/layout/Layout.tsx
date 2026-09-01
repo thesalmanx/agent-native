@@ -2,9 +2,9 @@ import {
   isAgentChatHomeHandoffActive,
   useAgentChatHomeHandoff,
   useAgentChatHomeHandoffLinks,
-} from "@agent-native/core/client/agentkit-chat";
+} from "@agent-native/core/client/agentkit-chat/rail";
 import { useT } from "@agent-native/core/client/i18n";
-import { HeaderActionsProvider } from "@agent-native/toolkit/app-shell";
+import { HeaderActionsProvider } from "@agent-native/toolkit/app-shell/header-actions";
 import { IconMenu2 } from "@tabler/icons-react";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { useLocation } from "react-router";

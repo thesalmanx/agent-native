@@ -299,6 +299,9 @@ describe("AgentKitChat", () => {
     expect(source).toContain(
       "willQueue={active && queueWhileRunning && capabilities.messageQueue}",
     );
+    expect(source).toContain(
+      "showModelSelector && capabilities.modelSelection !== false",
+    );
     expect(source).toContain("command.execute");
     expect(source.indexOf('className="agentkit-suggestions"')).toBeLessThan(
       source.indexOf("<PromptComposer"),

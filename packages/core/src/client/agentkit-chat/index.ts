@@ -16,6 +16,7 @@ import {
   type ReactNode,
 } from "react";
 
+import { coreComposerModelAdapters } from "../composer/model-runtime-adapters.js";
 import { useFormatters, useT } from "../i18n.js";
 
 export {
@@ -88,6 +89,10 @@ export function CoreComposerRuntimeProvider({
   const adapters = useMemo<ComposerRuntimeAdapters>(
     () => ({
       ...coreAdapters,
+      models: {
+        ...coreAdapters?.models,
+        ...coreComposerModelAdapters,
+      },
       translate,
       formatNumber: (value, options) => formatters.formatNumber(value, options),
     }),

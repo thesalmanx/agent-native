@@ -29,12 +29,14 @@ afterEach(() => {
 });
 
 describe("CoreComposerRuntimeProvider", () => {
-  it("renders immediately and upgrades to Core's composer adapters", async () => {
+  it("keeps essential model hooks stable while optional adapters load", async () => {
     const modelHooks: unknown[] = [];
+    const resourceHooks: unknown[] = [];
 
     function Consumer() {
       const adapters = useComposerRuntimeAdapters();
       modelHooks.push(adapters.models?.useChatModels);
+      resourceHooks.push(adapters.resources?.isMcpIntegrationAvailable);
       const models = adapters.models!.useChatModels!({ enabled: false });
       return <span>{models.selectedModel}</span>;
     }
@@ -48,6 +50,9 @@ describe("CoreComposerRuntimeProvider", () => {
     });
 
     expect(container.textContent).not.toBe("");
-    await vi.waitFor(() => expect(new Set(modelHooks).size).toBeGreaterThan(1));
+    await vi.waitFor(() =>
+      expect(new Set(resourceHooks).size).toBeGreaterThan(1),
+    );
+    expect(new Set(modelHooks).size).toBe(1);
   });
 });

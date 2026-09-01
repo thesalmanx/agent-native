@@ -23,12 +23,19 @@ const violations = roots.flatMap((root) => {
 });
 
 const chatSidebarPath = "templates/chat/app/components/layout/Sidebar.tsx";
+const chatLayoutPath = "templates/chat/app/components/layout/Layout.tsx";
 const chatRoutePath = "templates/chat/app/routes/home.tsx";
+const chatToolkitProviderPath =
+  "templates/chat/app/components/ui/toolkit-provider.tsx";
 let chatSidebar: string;
+let chatLayout: string;
 let chatRoute: string;
+let chatToolkitProvider: string;
 try {
   chatSidebar = readFileSync(chatSidebarPath, "utf8");
+  chatLayout = readFileSync(chatLayoutPath, "utf8");
   chatRoute = readFileSync(chatRoutePath, "utf8");
+  chatToolkitProvider = readFileSync(chatToolkitProviderPath, "utf8");
 } catch (error) {
   throw new Error(
     `[guard:chat-first-shared-ui] Unable to read the Chat template contract files`,
@@ -63,10 +70,27 @@ const chatRouteViolations = [
     : null,
 ].filter((violation): violation is string => Boolean(violation));
 
+const chatBootstrapViolations = [
+  chatSidebar.includes('from "@agent-native/core/client/agentkit-chat"') ||
+  chatLayout.includes('from "@agent-native/core/client/agentkit-chat"')
+    ? "Chat shell chrome must use the lightweight AgentKit rail entry point"
+    : null,
+  chatToolkitProvider.includes('from "@agent-native/toolkit"')
+    ? "Chat shell providers must not load the broad Toolkit barrel before hydration"
+    : null,
+  chatSidebar.includes('from "@agent-native/toolkit/chat-history"')
+    ? "Chat shell history must import its focused component entry point"
+    : null,
+  chatLayout.includes('from "@agent-native/toolkit/app-shell"')
+    ? "Chat shell layout must import its focused app-shell entry point"
+    : null,
+].filter((violation): violation is string => Boolean(violation));
+
 if (
   violations.length > 0 ||
   chatRailViolations.length > 0 ||
-  chatRouteViolations.length > 0
+  chatRouteViolations.length > 0 ||
+  chatBootstrapViolations.length > 0
 ) {
   console.error(
     [
@@ -78,6 +102,9 @@ if (
         : null,
       chatRouteViolations.length > 0
         ? `Chat route contract violation(s):\n${chatRouteViolations.map((violation) => `- ${violation}`).join("\n")}`
+        : null,
+      chatBootstrapViolations.length > 0
+        ? `Chat bootstrap contract violation(s):\n${chatBootstrapViolations.map((violation) => `- ${violation}`).join("\n")}`
         : null,
     ]
       .filter(Boolean)

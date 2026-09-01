@@ -4,12 +4,6 @@ import {
 } from "@agent-native/toolkit/composer/runtime-adapters";
 import { useMemo, type ReactNode } from "react";
 
-import {
-  DEFAULT_REASONING_EFFORT,
-  getReasoningEffortOptionsForModel,
-  reasoningEffortLabel,
-  resolveReasoningEffortSelection,
-} from "../../shared/reasoning-effort.js";
 import { applyVoiceContextReplacements } from "../../voice/index.js";
 import {
   formatAgentChatContextItemsForPrompt,
@@ -36,12 +30,8 @@ import { McpIntegrationDialog } from "../resources/McpIntegrationDialog.js";
 import { useCreateMcpServer } from "../resources/use-mcp-servers.js";
 import { BuilderConnectPopover } from "../settings/BuilderConnectPopover.js";
 import { useBuilderConnectFlow } from "../settings/useBuilderStatus.js";
-import {
-  fetchAgentEngineConfiguredState,
-  useAgentEngineConfigured,
-} from "../use-agent-engine-configured.js";
-import { useChatModels } from "../use-chat-models.js";
 import { useVoiceProviderStatus } from "../voice-provider-status.js";
+import { coreComposerModelAdapters } from "./model-runtime-adapters.js";
 
 const REALTIME_VOICE_REQUEST_SOURCE = "realtime-voice";
 
@@ -62,17 +52,9 @@ type CoreComposerRuntimeAdapters = Omit<ComposerRuntimeAdapters, "translate">;
 export const coreComposerAdapters: CoreComposerRuntimeAdapters = {
   resolvePath: (path) => appPath(path),
   models: {
-    useChatModels,
-    useAgentEngineConfigured,
-    fetchAgentEngineConfiguredState,
+    ...coreComposerModelAdapters,
     BuilderSetupCard,
     BuilderSetupContent,
-    reasoning: {
-      defaultEffort: DEFAULT_REASONING_EFFORT,
-      getOptionsForModel: getReasoningEffortOptionsForModel,
-      label: reasoningEffortLabel,
-      resolve: resolveReasoningEffortSelection,
-    },
   },
   agentChat: {
     sendToAgentChat,
