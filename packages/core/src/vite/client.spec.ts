@@ -2555,6 +2555,35 @@ describe("Vite SSR stubs", () => {
   });
 });
 
+describe("external store client compatibility", () => {
+  it("replaces CommonJS shims with ESM modules only in the client graph", async () => {
+    const plugin = agentNative().find(
+      (entry) => entry.name === "agent-native-external-store-esm-shim",
+    ) as any;
+
+    expect(plugin).toBeDefined();
+    const directEntry = await plugin.resolveId(
+      "use-sync-external-store/with-selector.js",
+      undefined,
+      { ssr: false },
+    );
+    const shimEntry = await plugin.resolveId(
+      "use-sync-external-store/shim/with-selector.js",
+      undefined,
+      { ssr: false },
+    );
+    expect(directEntry).toMatch(/external-store-shim\.(?:ts|js)$/);
+    expect(shimEntry).toBe(directEntry);
+    expect(
+      await plugin.resolveId(
+        "use-sync-external-store/shim/with-selector.js",
+        undefined,
+        { ssr: true },
+      ),
+    ).toBeNull();
+  });
+});
+
 describe("local-core dev aliases and router dedupe", () => {
   it("dedupes react-router when the app depends on react-router", () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "an-vite-dedupe-"));
@@ -2689,6 +2718,11 @@ describe("local-core dev aliases and router dedupe", () => {
           "@agent-native/agentkit-react": "^0.1.0",
           "@agent-native/core": "^0.176.0",
           "@agent-native/toolkit": "^0.19.0",
+          react: "^19.2.0",
+          "react-dom": "^19.2.0",
+          recharts: "^3.9.2",
+          "use-sync-external-store": "^1.6.0",
+          zustand: "^5.0.15",
         },
       }),
     );
@@ -2708,9 +2742,25 @@ describe("local-core dev aliases and router dedupe", () => {
           "@agent-native/toolkit",
         ]),
       );
-      expect(
-        (config.optimizeDeps as { include?: string[] } | undefined)?.include,
-      ).not.toContain("@agent-native/core");
+      const include =
+        (config.optimizeDeps as { include?: string[] } | undefined)?.include ??
+        [];
+      expect(include).not.toContain("@agent-native/core");
+      expect(include).not.toContain("@excalidraw/excalidraw");
+      expect(include).not.toContain("mermaid");
+      expect(include).toEqual(
+        expect.arrayContaining([
+          "react",
+          "react-dom",
+          "react-dom/client",
+          "react-dom/server",
+          "recharts",
+          "@agent-native/core > highlight.js/lib/core",
+          "zustand",
+          "zustand/traditional",
+          "use-sync-external-store/shim/with-selector.js",
+        ]),
+      );
     } finally {
       process.chdir(previousCwd);
       fs.rmSync(tmpDir, { recursive: true, force: true });

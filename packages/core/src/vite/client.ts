@@ -818,6 +818,7 @@ function getClientDedupe(cwd: string): string[] {
     "@assistant-ui/core",
     "@assistant-ui/store",
     "@assistant-ui/tap",
+    ...(hasDep("zustand", cwd) ? ["zustand"] : []),
     // Framework routers must share one react-router instance so
     // FrameworkContext (Meta/Links/Scripts) matches ServerRouter/HydratedRouter.
     ...(hasDep("react-router", cwd)
@@ -995,13 +996,31 @@ function getReactRouterAliases(
  * checkout while the consuming app's assistant-ui package resolves a newer
  * copy. Pin both public entry points to the consumer's installed peer graph.
  */
+function getAssistantUiRequire(cwd: string): NodeJS.Require | null {
+  try {
+    const appRequire = createRequire(path.join(cwd, "package.json"));
+    let assistantUiEntry: string;
+    try {
+      assistantUiEntry = appRequire.resolve("@assistant-ui/react");
+    } catch {
+      const coreRequire = createRequire(
+        appRequire.resolve("@agent-native/core"),
+      );
+      assistantUiEntry = coreRequire.resolve("@assistant-ui/react");
+    }
+    return createRequire(assistantUiEntry);
+  } catch {
+    // coercion-ok: null is the typed absence state for an unavailable optional peer graph.
+    return null;
+  }
+}
+
 function getAssistantUiAliases(
   cwd: string,
 ): Array<{ find: RegExp; replacement: string }> {
   try {
-    const appRequire = createRequire(path.join(cwd, "package.json"));
-    const assistantUiEntry = appRequire.resolve("@assistant-ui/react");
-    const assistantUiRequire = createRequire(assistantUiEntry);
+    const assistantUiRequire = getAssistantUiRequire(cwd);
+    if (!assistantUiRequire) return [];
     return [
       // A linked framework checkout can otherwise resolve the assistant-ui
       // imports in core's source graph from the checkout's React 19.2.7 peer
@@ -1171,6 +1190,22 @@ function getDefaultOptimizeDeps(cwd: string): string[] {
       specifier:
         "@agent-native/core > @assistant-ui/react > assistant-stream/utils",
       packageName: "@agent-native/core",
+    },
+    {
+      specifier: "zustand",
+      packageName: "zustand",
+    },
+    { specifier: "zustand/react", packageName: "zustand" },
+    { specifier: "zustand/shallow", packageName: "zustand" },
+    { specifier: "zustand/traditional", packageName: "zustand" },
+    { specifier: "zustand/vanilla", packageName: "zustand" },
+    {
+      specifier: "use-sync-external-store/shim/index.js",
+      packageName: "use-sync-external-store",
+    },
+    {
+      specifier: "use-sync-external-store/shim/with-selector.js",
+      packageName: "use-sync-external-store",
     },
     { specifier: "@codemirror/lang-sql" },
     { specifier: "@codemirror/theme-one-dark" },
@@ -1354,6 +1389,57 @@ function getDefaultOptimizeDeps(cwd: string): string[] {
       }
       return specifier;
     });
+}
+
+function getAgentKitOptimizeDeps(cwd: string): string[] {
+  const requiredTransitiveDeps = new Set([
+    "@agent-native/core > @assistant-ui/react",
+    "@agent-native/core > @assistant-ui/react-markdown",
+    "@agent-native/core > @assistant-ui/store",
+    "@agent-native/core > @assistant-ui/tap",
+    "@agent-native/core > @assistant-ui/react > assistant-stream",
+    "@agent-native/core > @assistant-ui/react > assistant-stream/utils",
+    "zustand",
+    "zustand/react",
+    "zustand/shallow",
+    "zustand/traditional",
+    "zustand/vanilla",
+    "use-sync-external-store/shim/index.js",
+    "use-sync-external-store/shim/with-selector.js",
+    "@agent-native/core > react-markdown",
+    "@agent-native/core > react-i18next",
+    "@agent-native/toolkit > @tiptap/react > use-sync-external-store/shim/index.js",
+    "@agent-native/toolkit > @tiptap/react > use-sync-external-store/shim/with-selector.js",
+    "@agent-native/toolkit > tiptap-markdown > markdown-it-task-lists",
+    "@tabler/icons-react",
+    "@tanstack/react-query",
+    "clsx",
+    "next-themes",
+    "react-router",
+    "react-router/dom",
+    "recharts",
+    "@agent-native/core > lowlight",
+    "@agent-native/core > remark-gfm",
+    "sonner",
+    "tailwind-merge",
+    "zod",
+  ]);
+
+  // Framework packages stay as ESM, while this deliberately small set covers
+  // the CommonJS entry points used by the Chat surface. Direct app imports are
+  // still discovered normally by Vite without pulling every Core product
+  // surface into the cold-start bundle.
+  return [
+    ...(hasDep("react", cwd) ? ["react"] : []),
+    ...(hasDep("react-dom", cwd)
+      ? ["react-dom", "react-dom/client", "react-dom/server"]
+      : []),
+    ...getDefaultOptimizeDeps(cwd).filter(
+      (dep) =>
+        requiredTransitiveDeps.has(dep) ||
+        dep.startsWith("@agent-native/core > highlight.js/"),
+    ),
+  ];
 }
 
 /**
@@ -3580,6 +3666,42 @@ function authClientAssetPlugin(): Plugin {
   };
 }
 
+/**
+ * Vite 8's Rolldown optimizer can leave use-sync-external-store's CommonJS
+ * shims unconverted when they are reached through linked framework packages.
+ * React has shipped the underlying hook since React 18, so expose equivalent
+ * ESM client modules and keep Node's package implementation for SSR.
+ */
+function externalStoreShimPlugin(): Plugin {
+  const sourceEntry = path.resolve(__dirname, "external-store-shim.ts");
+  const entry = fs.existsSync(sourceEntry)
+    ? sourceEntry
+    : path.resolve(__dirname, "external-store-shim.js");
+  return {
+    name: "agent-native-external-store-esm-shim",
+    enforce: "pre",
+    resolveId(source, _importer, options) {
+      if (options?.ssr) return null;
+      if (
+        source === "use-sync-external-store" ||
+        source === "use-sync-external-store/shim" ||
+        source === "use-sync-external-store/shim/index.js"
+      ) {
+        return entry;
+      }
+      if (
+        source === "use-sync-external-store/with-selector" ||
+        source === "use-sync-external-store/with-selector.js" ||
+        source === "use-sync-external-store/shim/with-selector" ||
+        source === "use-sync-external-store/shim/with-selector.js"
+      ) {
+        return entry;
+      }
+      return null;
+    },
+  };
+}
+
 function createAgentNativePlugins(
   options: ClientConfigOptions | AgentNativeVitePluginOptions,
   {
@@ -3607,6 +3729,7 @@ function createAgentNativePlugins(
     // the server, so we can't blanket-stub it here).
     ssrStubPlugin([...ALWAYS_SSR_STUBBED, ...(options.ssrStubs ?? [])]),
     ...userPlugins,
+    externalStoreShimPlugin(),
     appChangelogRawPlugin(),
     actionTypesPlugin(),
     agentsBundlePlugin({ agentNativeConfig: options.agentNativeConfig }),
@@ -3708,6 +3831,7 @@ function createAgentNativeConfig(
   workspaceConfig?: AgentNativeConfigInput,
 ): UserConfig {
   const cwd = process.cwd();
+  const usesAgentKit = hasDep("@agent-native/agentkit", cwd);
   const configContext = createAgentNativeConfigContext(command, mode);
   const projectConfigInput = projectConfig ?? options.agentNativeConfig;
 
@@ -4057,7 +4181,9 @@ function createAgentNativeConfig(
     optimizeDeps: {
       ...userOptimizeDeps,
       include: [
-        ...getDefaultOptimizeDeps(cwd),
+        ...(usesAgentKit
+          ? getAgentKitOptimizeDeps(cwd)
+          : getDefaultOptimizeDeps(cwd)),
         ...(hasDep("@agent-native/pinpoint", cwd)
           ? ["@agent-native/pinpoint/react"]
           : []),
