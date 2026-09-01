@@ -19,7 +19,8 @@
  * 2. One page.goto to `/home` so local auto-login runs before the public shell.
  * 3. Navigate to `/` and verify the authenticated client handoff to a durable thread.
  * 4. waitForViteDepsQuiet(server logs) before strict assertions.
- * 5. Retry goto/evaluate only for transient Playwright navigation errors.
+ * 5. Retry goto/evaluate only for known Vite startup responses and transient
+ *    Playwright navigation errors.
  */
 import assert from "node:assert/strict";
 import {
@@ -49,6 +50,7 @@ import {
 } from "./playwright-browser-hint";
 import {
   isRetryableSessionReadErrorMessage,
+  isTransientCommittedNavigationResponse,
   isTransientStartupPollResponse,
 } from "./qa-standalone-chat-dev-smoke-readiness";
 
@@ -849,7 +851,21 @@ async function gotoCommitted(
   let lastError: unknown;
   for (let attempt = 0; attempt < attempts; attempt++) {
     try {
-      await page.goto(url, { waitUntil, timeout: 90_000 });
+      const response = await page.goto(url, { waitUntil, timeout: 90_000 });
+      if (response) {
+        const status = response.status();
+        if (status === 503 || status === 504) {
+          throw new Error(`HTTP ${status} while the Vite server is warming up`);
+        }
+        if (status === 500) {
+          const body = await response.text();
+          if (isTransientCommittedNavigationResponse(status, body)) {
+            throw new Error(
+              `HTTP ${status} while the Vite server is warming up`,
+            );
+          }
+        }
+      }
       return;
     } catch (err) {
       lastError = err;
@@ -1142,9 +1158,17 @@ async function waitForAuthenticatedShell(
     if (await homeLink.isVisible().catch(() => false)) break;
 
     const lastUrl = page.url();
-    const lastBody = await retryAfterNavigation("body read", () =>
-      page.locator("body").innerText({ timeout: 10_000 }),
-    );
+    const lastBody = await readBodyPreview(page);
+
+    if (lastBody.startsWith("<unreadable:")) {
+      // `/home` is an idempotent auto-login warm-up route. A cold Vite server
+      // can replace its first committed 503 with another navigation before a
+      // document exists, so it is safe to re-enter this route. Do not extend
+      // this retry to `/`: that route creates the durable Chat thread.
+      await sleep(1_000);
+      await gotoCommitted(page, `${baseUrl}/home`);
+      continue;
+    }
 
     if (/unexpected server error/i.test(lastBody)) {
       throw new Error(
@@ -2332,6 +2356,16 @@ async function main(): Promise<void> {
     page.on("requestfailed", (request) => {
       const url = request.url();
       if (!url.startsWith(running.baseUrl)) return;
+      if (
+        new URL(url).pathname === "/_agent-native/agent-chat/runs/active" &&
+        request.method() === "GET" &&
+        request.failure()?.errorText === "net::ERR_ABORTED"
+      ) {
+        recordSuppressedNoise(
+          `expected active-run read cancellation ${request.method()} ${url}`,
+        );
+        return;
+      }
       if (
         new URL(url).pathname === "/_agent-native/events" &&
         request.method() === "GET" &&

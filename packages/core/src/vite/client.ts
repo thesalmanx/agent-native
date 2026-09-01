@@ -1379,37 +1379,6 @@ function getDefaultOptimizeDeps(cwd: string): string[] {
 }
 
 function getAgentKitOptimizeDeps(cwd: string): string[] {
-  // Vite's entry scan stops at package boundaries. AgentKit's compiled Chat
-  // graph imports these Toolkit subpaths transitively, so they otherwise appear
-  // only after the first authenticated route renders. That late discovery
-  // replaces the optimizer bundle and reloads the client-only shell mid-handoff.
-  const chatToolkitEntries = [
-    "@agent-native/toolkit/clipboard",
-    "@agent-native/toolkit/composer",
-    "@agent-native/toolkit/composer/PastedTextChip",
-    "@agent-native/toolkit/composer/attachment-accept",
-    "@agent-native/toolkit/composer/model-selection",
-    "@agent-native/toolkit/composer/pasted-text",
-    "@agent-native/toolkit/composer/realtime-voice-transcript",
-    "@agent-native/toolkit/editor/SharedRichEditor",
-    "@agent-native/toolkit/markdown-block-split",
-    "@agent-native/toolkit/sharing",
-    "@agent-native/toolkit/streaming-text-smoothing",
-    "@agent-native/toolkit/ui/alert-dialog",
-    "@agent-native/toolkit/ui/avatar",
-    "@agent-native/toolkit/ui/badge",
-    "@agent-native/toolkit/ui/checkbox",
-    "@agent-native/toolkit/ui/command",
-    "@agent-native/toolkit/ui/cube-loader",
-    "@agent-native/toolkit/ui/dialog",
-    "@agent-native/toolkit/ui/pagination",
-    "@agent-native/toolkit/ui/popover",
-    "@agent-native/toolkit/ui/select",
-    "@agent-native/toolkit/ui/sonner",
-    "@agent-native/toolkit/ui/spinner",
-    "@agent-native/toolkit/ui/switch",
-    "@agent-native/toolkit/ui/textarea",
-  ];
   const requiredTransitiveDeps = new Set([
     "@agent-native/core > @assistant-ui/react",
     "@agent-native/core > @assistant-ui/react-markdown",
@@ -1455,7 +1424,6 @@ function getAgentKitOptimizeDeps(cwd: string): string[] {
     ...(hasDep("@agent-native/agentkit", cwd)
       ? ["@agent-native/agentkit/react"]
       : []),
-    ...(hasDep("@agent-native/toolkit", cwd) ? chatToolkitEntries : []),
     ...getDefaultOptimizeDeps(cwd).filter(
       (dep) =>
         requiredTransitiveDeps.has(dep) ||
@@ -4223,6 +4191,17 @@ function createAgentNativeConfig(
       // serves stale code even after the source / dist is updated.
       exclude: [
         ...(findCoreSrcDir(cwd) !== null ? CORE_CLIENT_SUBPATHS : []),
+        // AgentKit's compiled entry is small enough to prebundle, but its
+        // Toolkit graph is intentionally broad. Bundling every Toolkit
+        // subpath serializes the first route behind a multi-minute optimizer
+        // pass on resource-constrained hosts. Keep Toolkit as ESM instead;
+        // excluding its package root also prevents late subpath discovery
+        // from replacing the optimizer bundle during the Chat handoff. Keep
+        // Tooltip ESM too: its global provider lives in Core while Toolkit
+        // renders consumers, so optimizing only one side splits Radix context.
+        ...(usesAgentKit && hasDep("@agent-native/toolkit", cwd)
+          ? ["@agent-native/toolkit", "@radix-ui/react-tooltip"]
+          : []),
         // Workspace dependencies resolve to source and must remain outside the
         // optimizer for HMR. Packed or published framework artifacts are not
         // returned here: prebundling those compiled modules is what prevents a

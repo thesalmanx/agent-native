@@ -2710,7 +2710,7 @@ describe("local-core dev aliases and router dedupe", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it("prebundles published AgentKit packages before the first cold Chat route", () => {
+  it("prebundles the published AgentKit entry without serializing Toolkit", () => {
     const previousCwd = process.cwd();
     const tmpDir = fs.mkdtempSync(
       path.join(os.tmpdir(), "an-vite-agentkit-esm-"),
@@ -2742,19 +2742,15 @@ describe("local-core dev aliases and router dedupe", () => {
       expect(exclude).not.toContain("@agent-native/agentkit");
       expect(exclude).not.toContain("@agent-native/agentkit-react");
       expect(exclude).not.toContain("@agent-native/core");
-      expect(exclude).not.toContain("@agent-native/toolkit");
+      expect(exclude).toContain("@agent-native/toolkit");
+      expect(exclude).toContain("@radix-ui/react-tooltip");
       const include =
         (config.optimizeDeps as { include?: string[] } | undefined)?.include ??
         [];
       expect(include).toContain("@agent-native/agentkit/react");
-      expect(include).toEqual(
-        expect.arrayContaining([
-          "@agent-native/toolkit/composer",
-          "@agent-native/toolkit/editor/SharedRichEditor",
-          "@agent-native/toolkit/streaming-text-smoothing",
-          "@agent-native/toolkit/ui/dialog",
-          "@agent-native/toolkit/ui/popover",
-        ]),
+      expect(include).not.toContain("@agent-native/toolkit/composer");
+      expect(include).not.toContain(
+        "@agent-native/toolkit/editor/SharedRichEditor",
       );
       expect(include).not.toContain("@agent-native/core");
       expect(include).not.toContain("@excalidraw/excalidraw");
