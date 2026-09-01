@@ -1695,6 +1695,7 @@ describe("agentNative Vite plugin preset", () => {
     const depPlugins = config.optimizeDeps.rolldownOptions.plugins;
     expect(depPlugins.map((p: any) => p.name)).toEqual([
       "app-dep-plugin",
+      "agent-native-external-store-esm-shim",
       "agent-native:no-dep-prebundle-sourcemaps",
     ]);
     // Vite hardcodes `sourcemap: "hidden"` in the optimizer's bundle.write();
@@ -1734,7 +1735,11 @@ describe("agentNative Vite plugin preset", () => {
     expect(Object.hasOwn(config.build, "rollupOptions")).toBe(false);
     expect(
       config.optimizeDeps.rolldownOptions.plugins.map((p: any) => p.name),
-    ).toEqual(["app-dep-plugin", "agent-native:no-dep-prebundle-sourcemaps"]);
+    ).toEqual([
+      "app-dep-plugin",
+      "agent-native-external-store-esm-shim",
+      "agent-native:no-dep-prebundle-sourcemaps",
+    ]);
   });
 
   it("restores dep prebundle sourcemaps when AGENT_NATIVE_DEP_SOURCEMAPS=1", async () => {
@@ -2705,7 +2710,7 @@ describe("local-core dev aliases and router dedupe", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it("serves the AgentKit client graph as ESM instead of blocking cold routes on prebundling", () => {
+  it("prebundles published AgentKit packages before the first cold Chat route", () => {
     const previousCwd = process.cwd();
     const tmpDir = fs.mkdtempSync(
       path.join(os.tmpdir(), "an-vite-agentkit-esm-"),
@@ -2734,17 +2739,14 @@ describe("local-core dev aliases and router dedupe", () => {
         (config.optimizeDeps as { exclude?: string[] } | undefined)?.exclude ??
         [];
 
-      expect(exclude).toEqual(
-        expect.arrayContaining([
-          "@agent-native/agentkit",
-          "@agent-native/agentkit-react",
-          "@agent-native/core",
-          "@agent-native/toolkit",
-        ]),
-      );
+      expect(exclude).not.toContain("@agent-native/agentkit");
+      expect(exclude).not.toContain("@agent-native/agentkit-react");
+      expect(exclude).not.toContain("@agent-native/core");
+      expect(exclude).not.toContain("@agent-native/toolkit");
       const include =
         (config.optimizeDeps as { include?: string[] } | undefined)?.include ??
         [];
+      expect(include).toContain("@agent-native/agentkit/react");
       expect(include).not.toContain("@agent-native/core");
       expect(include).not.toContain("@excalidraw/excalidraw");
       expect(include).not.toContain("mermaid");
@@ -3143,12 +3145,16 @@ describe("local-core dev aliases and router dedupe", () => {
 
     try {
       process.chdir(appDir);
+      const config = defineConfig();
       const aliases =
         (
-          defineConfig().resolve as {
+          config.resolve as {
             alias?: Array<{ find: RegExp; replacement: string }>;
           }
         )?.alias ?? [];
+      const exclude =
+        (config.optimizeDeps as { exclude?: string[] } | undefined)?.exclude ??
+        [];
 
       const popoverAlias = aliases.find((alias) =>
         alias.find instanceof RegExp
@@ -3167,6 +3173,13 @@ describe("local-core dev aliases and router dedupe", () => {
       expect(agentkitStylesAlias?.replacement).toBe(
         path.join(agentkitRoot, "src/styles.css"),
       );
+      expect(exclude).toEqual(
+        expect.arrayContaining([
+          "@agent-native/agentkit",
+          "@agent-native/toolkit",
+        ]),
+      );
+      expect(exclude).not.toContain("@agent-native/pinpoint");
       expect(
         aliases.some((alias) =>
           alias.find instanceof RegExp

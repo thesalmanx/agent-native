@@ -1126,18 +1126,6 @@ const CORE_CLIENT_SUBPATHS = [
   "@agent-native/core/voice",
 ];
 
-// AgentKit's React package reaches Core and Toolkit through a wide ESM graph.
-// Vite's optimizer serializes the first route request behind that graph on
-// cold, resource-constrained machines; serving the framework packages as ESM
-// keeps the request responsive while their third-party dependencies remain
-// bundled. Excluding the package roots also covers their exported subpaths.
-const AGENTKIT_CLIENT_PACKAGE_ROOTS = [
-  "@agent-native/agentkit",
-  "@agent-native/agentkit-react",
-  "@agent-native/core",
-  "@agent-native/toolkit",
-];
-
 const NODE_SSR_NATIVE_EXTERNALS = ["better-sqlite3", "bindings"];
 
 /**
@@ -1163,12 +1151,11 @@ const disableDepSourcemapsPlugin: Plugin = {
 
 function getDefaultOptimizeDeps(cwd: string): string[] {
   const inMonorepo = findCoreSrcDir(cwd) !== null;
-  const usesAgentKit = hasDep("@agent-native/agentkit", cwd);
   const entries: Array<{ specifier: string; packageName?: string }> = [
     // In monorepo mode the source alias resolves these to src/ on every
     // import, so prebundling from dist/ would just create a stale snapshot.
     // Skip them entirely — `optimizeDeps.exclude` below makes that explicit.
-    ...(inMonorepo || usesAgentKit
+    ...(inMonorepo
       ? []
       : ([
           { specifier: "@agent-native/core" },
@@ -1433,6 +1420,9 @@ function getAgentKitOptimizeDeps(cwd: string): string[] {
     ...(hasDep("react", cwd) ? ["react"] : []),
     ...(hasDep("react-dom", cwd)
       ? ["react-dom", "react-dom/client", "react-dom/server"]
+      : []),
+    ...(hasDep("@agent-native/agentkit", cwd)
+      ? ["@agent-native/agentkit/react"]
       : []),
     ...getDefaultOptimizeDeps(cwd).filter(
       (dep) =>
@@ -3455,14 +3445,17 @@ function arrayFrom<T>(value: T | T[] | undefined): T[] {
   return Array.isArray(value) ? value : [value];
 }
 
+const LOCAL_WORKSPACE_SOURCE_ALIAS_EXCLUDES = new Set([
+  "@agent-native/pinpoint",
+]);
+
 function localWorkspacePackageAliases(
   packages: Array<{ packageName: string; packageDir: string }>,
 ): any[] {
   const aliases: any[] = [];
-  const sourceAliasExcludes = new Set(["@agent-native/pinpoint"]);
 
   for (const { packageName, packageDir } of packages) {
-    if (sourceAliasExcludes.has(packageName)) continue;
+    if (LOCAL_WORKSPACE_SOURCE_ALIAS_EXCLUDES.has(packageName)) continue;
     const pkgPath = path.join(packageDir, "package.json");
     if (!fs.existsSync(pkgPath)) continue;
 
@@ -4198,9 +4191,16 @@ function createAgentNativeConfig(
       // serves stale code even after the source / dist is updated.
       exclude: [
         ...(findCoreSrcDir(cwd) !== null ? CORE_CLIENT_SUBPATHS : []),
-        ...(hasDep("@agent-native/agentkit", cwd)
-          ? AGENTKIT_CLIENT_PACKAGE_ROOTS
-          : []),
+        // Workspace dependencies resolve to source and must remain outside the
+        // optimizer for HMR. Packed or published framework artifacts are not
+        // returned here: prebundling those compiled modules is what prevents a
+        // cold Chat route from transforming the full framework graph on demand.
+        ...localWorkspacePackageDeps
+          .filter(
+            (pkg) =>
+              !LOCAL_WORKSPACE_SOURCE_ALIAS_EXCLUDES.has(pkg.packageName),
+          )
+          .map((pkg) => pkg.packageName),
         ...(userConfig.optimizeDeps?.exclude ?? []),
         ...(options.optimizeDeps?.exclude ?? []),
       ],
@@ -4211,6 +4211,7 @@ function createAgentNativeConfig(
               ...(userConfig.optimizeDeps?.rolldownOptions ?? {}),
               plugins: [
                 ...arrayFrom(userConfig.optimizeDeps?.rolldownOptions?.plugins),
+                externalStoreShimPlugin(),
                 disableDepSourcemapsPlugin,
               ],
             },

@@ -14,6 +14,12 @@ const coreRequire = createRequire(
 );
 
 export default defineConfig({
+  optimizeDeps: {
+    // React Router discovers route modules outside Vite's default HTML crawl.
+    // Scan them before accepting requests so an authenticated handoff never
+    // blocks on a first-use framework prebundle on smaller development hosts.
+    entries: ["app/**/*.{ts,tsx}"],
+  },
   resolve: {
     // Core and toolkit both use assistant-ui contexts. Keep published and
     // linked graphs on one store so the agent sidebar can compose reliably.

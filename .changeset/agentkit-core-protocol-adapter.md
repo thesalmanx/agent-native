@@ -12,4 +12,6 @@ connection requests and OAuth-safe continuation targets. Make generated Chat
 the production reference surface with a
 persistent composer, agent-authored suggestions, compact activity disclosures,
 workspace controls, stable follow-up streaming, and scaffolded local package
-resolution.
+resolution. Preoptimize compiled AgentKit Chat dependencies while preserving
+source-linked workspace HMR so generated apps remain responsive on cold,
+resource-constrained development hosts.
