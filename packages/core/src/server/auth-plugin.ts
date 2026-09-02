@@ -1,4 +1,7 @@
+import { getMethod, setResponseStatus } from "h3";
+
 import { autoMountAuth } from "./auth.js";
+import { getSession } from "./auth.js";
 import type { AuthOptions } from "./auth.js";
 import { runBetterAuthMigrations } from "./better-auth-migrations.js";
 import {
@@ -17,6 +20,26 @@ export function createAuthPlugin(options?: AuthOptions): NitroPluginDef {
     markDefaultPluginProvided(nitroApp, "auth");
     const isByoa = Boolean(options?.getSession);
     const app = getH3App(nitroApp);
+    const sessionPath = "/_agent-native/auth/session";
+
+    // The built-in auth session check is safe to serve while unrelated
+    // default plugins are still booting. ClientOnly app shells need this
+    // read before they can leave their hydration fallback, and holding it
+    // behind the full bootstrap turns an otherwise healthy local login into
+    // an indefinite loading state. The normal auth mount below remains the
+    // canonical route once initialization has completed.
+    if (!isByoa) {
+      markFrameworkRoutesReadyBeforeBootstrap(nitroApp, [sessionPath]);
+      app.use(sessionPath, async (event: any) => {
+        const method = getMethod(event);
+        if (method !== "GET" && method !== "HEAD") {
+          setResponseStatus(event, 405);
+          return { error: "Method not allowed" };
+        }
+        const session = await getSession(event);
+        return session ?? { error: "Not authenticated" };
+      });
+    }
     const initPromise = (async () => {
       // A BYOA provider owns its session lookup and login HTML. Mount it
       // immediately so a transient database outage in Better Auth or another
@@ -42,6 +65,7 @@ export function createAuthPlugin(options?: AuthOptions): NitroPluginDef {
     })();
     trackPluginInit(nitroApp, initPromise, {
       paths: [...FRAMEWORK_AUTH_EARLY_PATHS],
+      ...(isByoa ? {} : { excludedPaths: [sessionPath] }),
     });
   };
 }
