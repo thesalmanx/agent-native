@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
-import { labelTabHref } from "./AppLayout";
+import { buildLabelDisplayNames, labelTabHref } from "./AppLayout";
 
 function appLayoutSource(): string {
   return readFileSync(new URL("./AppLayout.tsx", import.meta.url), "utf8");
@@ -26,6 +26,32 @@ describe("AppLayout inbox rail count", () => {
     expect(source).toContain('const localCount = localCounts["__inboxTotal"]');
   });
 
+  it("uses the saved-filter-exclusive local count for a plain Inbox", () => {
+    const source = appLayoutSource();
+
+    expect(source).toContain("if (savedFilterQueries.length > 0)");
+    expect(source).toContain('return localCounts["__inboxExclusive"] ?? 0;');
+    expect(source).toContain('total["__inboxExclusive"]');
+    expect(source).toContain(
+      "const savedFilterThreads = savedFilterThreadIds(",
+    );
+    expect(source).toContain(
+      "filtered.filter((e) => !savedFilterThreads.has(inboxThreadKey(e)))",
+    );
+  });
+
+  it("groups badge rows with the rendered list's thread identity", () => {
+    const source = appLayoutSource();
+
+    expect(source).toContain(
+      'import { groupIntoThreads } from "@/lib/threads";',
+    );
+    expect(source).toContain("const threadRows = groupIntoThreads(filtered);");
+    expect(source).toContain(
+      "filterInboxTabEmails(filtered, null, pinnedLabels, savedFilterQueries)",
+    );
+  });
+
   it("collapses the native rail while the per-app chat is open", () => {
     const source = appLayoutSource();
 
@@ -35,6 +61,13 @@ describe("AppLayout inbox rail count", () => {
     expect(source).toContain(
       "(sidebarPinned ? sidebarCollapsed : perAppChatOpen)",
     );
+  });
+
+  it("reserves desktop content space while the unpinned sidebar is open", () => {
+    const source = appLayoutSource();
+
+    expect(source).toContain("!isMobile &&\n              showSidebar &&");
+    expect(source).toContain('sidebarOpen && !isMobile && "ps-64"');
   });
 
   it("keeps the explicit Other inbox tab and search restoration path", () => {
@@ -163,5 +196,25 @@ describe("labelTabHref", () => {
     // inbox, so they keep the client-slice-of-inbox behavior on purpose.
     expect(labelTabHref("important")).toBe("/inbox?label=important");
     expect(labelTabHref("updates")).toBe("/inbox?label=updates");
+  });
+});
+
+describe("buildLabelDisplayNames", () => {
+  it("disambiguates labels that share a short name", () => {
+    const displayNames = buildLabelDisplayNames([
+      { id: "top", name: "automated notifications", type: "user" },
+      {
+        id: "nested",
+        name: "[Superhuman]/AI/Automated_notifications",
+        type: "user",
+      },
+      { id: "pitch", name: "[Superhuman]/AI/Pitch", type: "user" },
+    ]);
+
+    expect(displayNames.get("top")).toBe("automated notifications");
+    expect(displayNames.get("nested")).toBe(
+      "[Superhuman]/AI/Automated notifications",
+    );
+    expect(displayNames.get("pitch")).toBe("Pitch");
   });
 });

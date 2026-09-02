@@ -9,6 +9,7 @@ import {
 } from "../agent/engine/credential-errors.js";
 import { BUILDER_GATEWAY_INTERNAL_ERROR_CODE } from "../agent/engine/error-detail.js";
 import type { AgentChatRichEventEnvelope } from "../agent/types.js";
+import type { ArtifactReceipt } from "../artifacts/detect.js";
 import type { AgentMcpAppPayload } from "../mcp-client/app-result.js";
 import { emitChatFirstOpenApp } from "./chat-first.js";
 import { formatChatErrorText, normalizeChatError } from "./error-format.js";
@@ -47,6 +48,7 @@ export type ContentPart =
        */
       outcome?: "unknown";
       completedSideEffect?: boolean;
+      artifacts?: ArtifactReceipt[];
       mcpApp?: AgentMcpAppPayload;
       chatUI?: ActionChatUIConfig;
       activity?: boolean;
@@ -89,6 +91,7 @@ export interface SSEEvent {
   result?: string;
   isError?: boolean;
   completedSideEffect?: boolean;
+  artifacts?: ArtifactReceipt[];
   mcpApp?: AgentMcpAppPayload;
   chatUI?: ActionChatUIConfig;
   /** Stable key the client echoes back in `approvedToolCalls` to approve a
@@ -1028,12 +1031,29 @@ function contentSnapshot(content: ContentPart[]): ContentPart[] {
       args: { ...part.args },
       ...(part.mcpApp ? { mcpApp: { ...part.mcpApp } } : {}),
       ...(part.chatUI ? { chatUI: { ...part.chatUI } } : {}),
+      ...(part.artifacts
+        ? { artifacts: part.artifacts.map((artifact) => ({ ...artifact })) }
+        : {}),
       ...(part.approval ? { approval: { ...part.approval } } : {}),
       ...(part.structuredMeta
         ? { structuredMeta: { ...part.structuredMeta } }
         : {}),
     };
   });
+}
+
+function mergeArtifactReceipts(
+  current: ArtifactReceipt[] | undefined,
+  incoming: ArtifactReceipt[],
+): ArtifactReceipt[] {
+  const receipts = new Map<string, ArtifactReceipt>();
+  for (const artifact of current ?? []) {
+    receipts.set(`${artifact.kind}:${artifact.id}`, artifact);
+  }
+  for (const artifact of incoming) {
+    receipts.set(`${artifact.kind}:${artifact.id}`, artifact);
+  }
+  return [...receipts.values()];
 }
 
 function repeatSignatureValue(value: unknown): string {
@@ -1132,6 +1152,12 @@ function coalesceJournalRecoveredTool(
       if (current.chatUI) prior.chatUI = current.chatUI;
       if (current.approval) prior.approval = { ...current.approval };
     }
+    if (current.artifacts !== undefined) {
+      prior.artifacts = mergeArtifactReceipts(
+        prior.artifacts,
+        current.artifacts,
+      );
+    }
     content.splice(completedIndex, 1);
     return true;
   }
@@ -1177,6 +1203,12 @@ function coalesceCompletedToolRepeat(
 
   previous.repeatCount =
     (previous.repeatCount ?? 1) + (current.repeatCount ?? 1);
+  if (current.artifacts !== undefined) {
+    previous.artifacts = mergeArtifactReceipts(
+      previous.artifacts,
+      current.artifacts,
+    );
+  }
   content.splice(completedIndex, 1);
 }
 
@@ -1722,6 +1754,9 @@ export function processEvent(
         if (ev.isError !== undefined) part.isError = ev.isError;
         if (ev.completedSideEffect !== undefined) {
           part.completedSideEffect = ev.completedSideEffect;
+        }
+        if (ev.artifacts !== undefined) {
+          part.artifacts = mergeArtifactReceipts(part.artifacts, ev.artifacts);
         }
         if (ev.mcpApp) part.mcpApp = ev.mcpApp;
         if (ev.chatUI) part.chatUI = ev.chatUI;

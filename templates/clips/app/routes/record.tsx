@@ -80,6 +80,7 @@ import {
   decideRecordingVisibilityAction,
   isMobileRecorderRuntime,
 } from "@/lib/recording-visibility";
+import { uploadChunkRequest } from "@/lib/upload-request";
 import { cn } from "@/lib/utils";
 
 // Client-side app-state writer (the server module pulls in Node's `events`
@@ -1642,9 +1643,9 @@ export default function RecordRoute() {
 
             let chunkRes: Response;
             try {
-              chunkRes = await fetch(url, {
-                method: "POST",
-                headers: { "Content-Type": uploadMimeType },
+              chunkRes = await uploadChunkRequest({
+                url,
+                contentType: uploadMimeType,
                 body: await slice.arrayBuffer(),
                 signal: chunkAbort.signal,
               });
@@ -1702,9 +1703,9 @@ export default function RecordRoute() {
         const { index, slice, url } = finalChunkDesc;
         let chunkRes: Response | null = null;
         try {
-          chunkRes = await fetch(url, {
-            method: "POST",
-            headers: { "Content-Type": uploadMimeType },
+          chunkRes = await uploadChunkRequest({
+            url,
+            contentType: uploadMimeType,
             body: await slice.arrayBuffer(),
             signal: abort.signal,
           });
@@ -2661,7 +2662,7 @@ export default function RecordRoute() {
       {/* Idle / pre-record panel. `/record` sits outside the `_app` layout, so
           it renders its own standalone surface for direct visits. */}
       {uiState === "idle" && (
-        <div className="flex min-h-screen flex-col items-center justify-center px-4 py-10">
+        <div className="flex min-h-screen flex-col items-center justify-start px-4 py-10">
           <div className="mb-6 flex items-center gap-2 text-primary">
             <IconVideo className="h-6 w-6" />
             <span className="text-sm font-medium uppercase tracking-wide">

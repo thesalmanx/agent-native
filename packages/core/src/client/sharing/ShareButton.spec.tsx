@@ -830,9 +830,16 @@ describe("ShareButton", () => {
     expect(container.textContent).toContain("Share link");
     expect(container.textContent).toContain("Export");
     expect(container.textContent).toContain("Send to...");
-    expect(container.textContent).not.toContain("Context");
+    expect(container.textContent).toContain("Context");
     expect(container.textContent).not.toContain("Context body");
     expect(container.textContent).not.toContain("Export body");
+    for (const tab of container.querySelectorAll<HTMLButtonElement>(
+      '[role="tab"]',
+    )) {
+      expect(
+        document.getElementById(tab.getAttribute("aria-controls") ?? ""),
+      ).not.toBeNull();
+    }
 
     const exportTab = Array.from(container.querySelectorAll("button")).find(
       (button) => button.textContent === "Export",
@@ -847,7 +854,7 @@ describe("ShareButton", () => {
     expect(container.textContent).not.toContain("Send body");
   });
 
-  it("omits the context tab when it is the only custom share tab", async () => {
+  it("renders the context tab when it is the only custom share tab", async () => {
     await act(async () => {
       root.render(
         <QueryClientProvider client={queryClient}>
@@ -868,10 +875,29 @@ describe("ShareButton", () => {
       );
     });
 
-    expect(container.textContent).not.toContain("Share deck");
-    expect(container.textContent).not.toContain("Context");
+    expect(container.textContent).toContain("Share link");
+    expect(container.textContent).toContain("Context");
     expect(container.textContent).not.toContain("Context body");
-    expect(container.querySelector('[role="tablist"]')).toBeNull();
+    expect(container.querySelector('[role="tablist"]')).not.toBeNull();
+
+    const contextTab = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "Context",
+    );
+    if (!contextTab) throw new Error("Context tab not found");
+
+    act(() => {
+      contextTab.click();
+    });
+
+    expect(container.textContent).toContain("Context body");
+    const contextPanelId = contextTab.getAttribute("aria-controls");
+    expect(contextPanelId).toBeTruthy();
+    const contextPanel = contextPanelId
+      ? document.getElementById(contextPanelId)
+      : null;
+    expect(contextPanel?.getAttribute("aria-labelledby")).toBe(
+      contextTab.getAttribute("id"),
+    );
   });
 
   it("buries organization search visibility under Advanced", async () => {

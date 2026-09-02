@@ -30,6 +30,10 @@ import {
   MAX_TURN_WALL_CLOCK_MS,
 } from "../app-config/run-lifecycle-invariants.js";
 import { readAppState } from "../application-state/script-helpers.js";
+import {
+  detectArtifactReceipts,
+  type ArtifactReceipt,
+} from "../artifacts/detect.js";
 import { isReadOnlyShellCommand } from "../coding-tools/index.js";
 import type { AgentNativeHarnessSetting } from "../config.js";
 import { getDbExec, isTransientDatabaseError } from "../db/client.js";
@@ -2591,6 +2595,7 @@ export interface AgentLoopToolResultSummary {
   name: string;
   content: string;
   isError: boolean;
+  artifacts?: ArtifactReceipt[];
 }
 
 export interface AgentLoopFinalResponseGuardContext {
@@ -3871,7 +3876,7 @@ async function waitForInterruptedToolLedgerEntry(opts: {
   timeoutMs: number;
   signal: AbortSignal;
   send: (event: AgentChatEvent) => void;
-}): Promise<string | null> {
+}): Promise<{ result: string; artifacts: ArtifactReceipt[] } | null> {
   const pollMs = INTERRUPTED_TOOL_LEDGER_POLL_MS;
   // Wait up to the tool's OWN declared timeout — the abandoned zombie can keep
   // running that long (e.g. a 12-minute image generation, whose provider keeps
@@ -4576,8 +4581,8 @@ function normalizeOptionalToolPlaceholders(
  * time. Evidence-gated exactly like `normalizeOptionalToolPlaceholders`:
  * only coerce a field whose CURRENT value fails schema validation (so a
  * legitimate string value is never touched — a field schema-valid as a
- * string is never also schema-valid as object/array) and whose parsed form
- * passes. Never touches values that are already the right shape.
+ * string is never also schema-valid as object/array). Match the parsed
+ * CONTAINER only; validating its contents here hides the real defect.
  */
 function coerceStringifiedJsonToolValues(
   schema: RawJsonSchema | undefined,
@@ -4608,7 +4613,11 @@ function coerceStringifiedJsonToolValues(
       continue;
     }
     if (typeof parsed !== "object" || parsed === null) continue;
-    if (!schemaAcceptsToolValue(propertySchema, parsed)) continue;
+    const parsedContainer = Array.isArray(parsed) ? "array" : "object";
+    const containerMatches = Array.isArray(expectedType)
+      ? expectedType.includes(parsedContainer)
+      : expectedType === parsedContainer;
+    if (!containerMatches) continue;
     normalized ??= { ...(input as Record<string, unknown>) };
     normalized[key] = parsed;
   }
@@ -5998,11 +6007,16 @@ export async function runAgentLoop(opts: {
         name: toolCall.name,
         input: normalizedToolInput,
       });
-      const recordToolResult = (content: string, isError: boolean) => {
+      const recordToolResult = (
+        content: string,
+        isError: boolean,
+        artifacts?: ArtifactReceipt[],
+      ) => {
         toolResultHistory.push({
           name: toolCall.name,
           content,
           isError,
+          ...(artifacts?.length ? { artifacts } : {}),
         });
       };
       const finalizeToolErrorResult = (rawResult: string): string => {
@@ -6357,8 +6371,11 @@ export async function runAgentLoop(opts: {
             input: toolCall.input as Record<string, unknown>,
             result,
             completedSideEffect: true,
+            ...(journaled.artifacts?.length
+              ? { artifacts: journaled.artifacts }
+              : {}),
           });
-          recordToolResult(result, false);
+          recordToolResult(result, false, journaled.artifacts);
           noteToolCallSucceeded(actionEntry);
           return {
             type: "tool-result" as const,
@@ -6400,7 +6417,7 @@ export async function runAgentLoop(opts: {
             // Zombie completed — recover the real result without re-executing.
             const result =
               `(Recovered from prior interrupted chunk — action already completed.)\n\n` +
-              ledgerResult;
+              ledgerResult.result;
             send({
               type: "tool_start",
               id: toolCall.id,
@@ -6414,9 +6431,12 @@ export async function runAgentLoop(opts: {
               input: toolCall.input as Record<string, unknown>,
               result,
               completedSideEffect: true,
+              ...(ledgerResult.artifacts.length > 0
+                ? { artifacts: ledgerResult.artifacts }
+                : {}),
               ...(actionEntry.chatUI ? { chatUI: actionEntry.chatUI } : {}),
             });
-            recordToolResult(result, false);
+            recordToolResult(result, false, ledgerResult.artifacts);
             noteToolCallSucceeded(actionEntry);
             return {
               type: "tool-result" as const,
@@ -6672,6 +6692,7 @@ export async function runAgentLoop(opts: {
         let toolResultImages:
           | import("./engine/types.js").EngineToolResultImagePart[]
           | undefined;
+        let toolArtifacts: ArtifactReceipt[] = [];
         try {
           // The run may have been aborted while we waited above for an
           // interrupted tool's ledger result (the wait can poll for minutes).
@@ -6755,12 +6776,23 @@ export async function runAgentLoop(opts: {
                 ) {
                   return;
                 }
-                const zombieText = zombieMcp ? zombieMcp.text : zombieRaw;
+                const zombieResultForAgent = zombieMcp
+                  ? zombieMcp.text
+                  : extractAgentImagesFromActionResult(zombieRaw).value;
                 const zombieStr =
-                  typeof zombieText === "string"
-                    ? zombieText
-                    : JSON.stringify(zombieText, null, 2);
-                void writeLedgerEntry(ledgerThreadId, ledgerToolKey, zombieStr);
+                  typeof zombieResultForAgent === "string"
+                    ? zombieResultForAgent
+                    : JSON.stringify(zombieResultForAgent, null, 2);
+                const zombieArtifacts = detectArtifactReceipts(
+                  zombieResultForAgent,
+                  toolCall.name,
+                );
+                void writeLedgerEntry(
+                  ledgerThreadId,
+                  ledgerToolKey,
+                  zombieStr,
+                  zombieArtifacts,
+                );
               })
               .catch(() => {
                 // Action errored in the zombie — no result to ledger.
@@ -6827,6 +6859,7 @@ export async function runAgentLoop(opts: {
               toolResultImages = extracted.images;
             }
           }
+          toolArtifacts = detectArtifactReceipts(resultForAgent, toolCall.name);
           if (toolResultImages) {
             imageNotes = [
               ...describeToolResultImages(toolResultImages),
@@ -6957,8 +6990,9 @@ export async function runAgentLoop(opts: {
               : {}),
           ...(mcpApp ? { mcpApp } : {}),
           ...(actionEntry.chatUI ? { chatUI: actionEntry.chatUI } : {}),
+          ...(toolArtifacts.length > 0 ? { artifacts: toolArtifacts } : {}),
         });
-        recordToolResult(result, isError);
+        recordToolResult(result, isError, toolArtifacts);
         if (!isError) {
           noteToolCallSucceeded(actionEntry);
           if (cacheKey) {

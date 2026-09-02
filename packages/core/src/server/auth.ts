@@ -400,6 +400,11 @@ export interface AuthOptions {
     tagline: string;
     description?: string;
     features?: string[];
+    screenshotPath?: string;
+    screenshotWidth?: number;
+    screenshotHeight?: number;
+    learnMoreUrl?: string;
+    learnMorePlacement?: "top-right" | "bottom-right";
     /** @deprecated Local execution is no longer offered from auth pages. */
     runLocalCommand?: string;
   };
@@ -780,9 +785,7 @@ function betterAuthCallbackURL(
 export function getConfiguredLoginHtml(event: H3Event): string | null {
   const config = _authGuardConfig;
   if (!config) return null;
-  const url = event.node?.req?.url ?? event.path ?? "/";
-  const queryStart = url.indexOf("?");
-  const rawPath = queryStart >= 0 ? url.slice(0, queryStart) : url;
+  const { rawPath } = getRequestPathAndSearch(event);
   const loginHtml =
     config.getLoginHtml?.(event, rawPath) ?? config.loginHtml ?? null;
   return loginHtml
@@ -3565,6 +3568,7 @@ function createAuthGuardFn(
       p.endsWith(".ico") ||
       p.endsWith(".png") ||
       p.endsWith(".svg") ||
+      p.endsWith(".webp") ||
       p.endsWith(".woff2") ||
       p.endsWith(".woff")
     ) {
@@ -5620,12 +5624,13 @@ async function mountBetterAuthRoutes(
 
       // A rotated BETTER_AUTH_SECRET leaves the persisted JWKS key
       // undecryptable, and Better Auth turns that into a 500 on any endpoint
-      // that signs a JWT (e.g. /token). The get-session hook heals itself via
-      // withJwksRotationRecovery; this backstop covers the endpoints that
-      // sign directly. healUndecryptableJwks verifies the key against the
-      // live secret before expiring anything, so a coincidental 500 is a
-      // no-op here. Magic-link verify is excluded: its one-time token is
-      // already consumed, so a replay can only produce a worse redirect.
+      // that signs a JWT (e.g. /token). The session response does not mint an
+      // optional JWT header, so it cannot turn a valid cookie session into a
+      // 500 when a key is stale. This backstop covers the endpoints that sign
+      // directly. healUndecryptableJwks verifies the key against the live
+      // secret before expiring anything, so a coincidental 500 is a no-op
+      // here. Magic-link verify is excluded: its one-time token is already
+      // consumed, so a replay can only produce a worse redirect.
       if (
         isResponse &&
         (response as Response).status >= 500 &&
@@ -6048,7 +6053,7 @@ async function mountBetterAuthRoutes(
           captureAuthError(e, { route: "signup", email });
         }
         const authError = publicAuthError(e, AUTH_SIGNUP_FALLBACK);
-        setResponseStatus(event, authError.statusCode ?? 409);
+        setResponseStatus(event, authError.statusCode ?? 500);
         return { error: authError.message };
       }
     }),
@@ -6334,7 +6339,7 @@ function mountAuthFallbackRoutes(app: H3App): void {
           captureAuthError(e, { route: "signup", email });
         }
         const authError = publicAuthError(e, AUTH_SIGNUP_FALLBACK);
-        setResponseStatus(event, authError.statusCode ?? 409);
+        setResponseStatus(event, authError.statusCode ?? 500);
         return { error: authError.message };
       }
     }),
