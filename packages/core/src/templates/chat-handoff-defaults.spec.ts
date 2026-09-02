@@ -17,7 +17,6 @@ function workspaceRoot(): string {
 const ROOT = workspaceRoot();
 
 const PAGE_CHAT_TEMPLATES = [
-  "chat",
   "assets",
   "analytics",
   "brain",
@@ -75,13 +74,13 @@ describe("page-chat handoff defaults", () => {
     expect(route).not.toContain("routeThreadId: threadId ?? null");
   });
 
-  it("gives AgentKit Chat a URL-backed thread before rendering the runtime", () => {
+  it("lets AgentKit Chat hand off to a URL-backed thread before rendering the runtime", () => {
     const route = readTemplateFile("chat", "app/routes/home.tsx");
+    expect(route).toContain('markAgentChatHomeHandoff("chat")');
+    expect(route).toContain("useState(");
     expect(route).toContain(
-      "const resolvedThreadId = threadId ?? homeThreadId",
+      "navigate(`/chat/${encodeURIComponent(threadId)}`, { replace: true })",
     );
-    expect(route).toContain("navigate(chatThreadPath(homeThreadId),");
-    expect(route).toContain("threadId={resolvedThreadId}");
   });
 
   it("does not force Plan's page chat to start a fresh thread", () => {
