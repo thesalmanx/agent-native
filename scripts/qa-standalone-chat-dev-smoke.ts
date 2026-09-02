@@ -874,6 +874,25 @@ async function gotoCommitted(
       lastError = err;
       const message = err instanceof Error ? err.message : String(err);
       if (!isRetryableGotoError(message) || attempt === attempts - 1) throw err;
+
+      // `/home` and `/` intentionally hand off to a durable `/chat/:threadId`
+      // route after the client shell hydrates. Playwright reports the original
+      // document navigation as aborted when that handoff wins the race; retrying
+      // the source URL would reset ClientOnly back to its SSR fallback and can
+      // keep the app stuck on "Churning" on a cold Vite graph.
+      try {
+        const current = new URL(page.url());
+        const requested = new URL(url);
+        if (
+          current.origin === requested.origin &&
+          /^\/chat\/chat-[^/]+$/.test(current.pathname)
+        ) {
+          return;
+        }
+      } catch {
+        // Keep the normal retry path when the browser has no committed URL.
+      }
+
       if (isCi || verbose) {
         console.warn(
           `[standalone-dev-smoke] goto retry ${attempt + 1}/${attempts}: ${message.split("\n")[0]}`,
