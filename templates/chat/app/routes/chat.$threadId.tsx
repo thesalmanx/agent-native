@@ -12,9 +12,8 @@ function ChatRouteFallback() {
 }
 
 function ClientChatRoute() {
-  const [ChatRouteContent, setChatRouteContent] = useState<ComponentType | null>(
-    null,
-  );
+  const [ChatRouteContent, setChatRouteContent] =
+    useState<ComponentType | null>(null);
 
   useEffect(() => {
     let cancelled = false;
