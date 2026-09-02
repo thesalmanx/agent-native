@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -28,7 +28,11 @@ import {
 
 describe("Nitro dev startup recovery", () => {
   it("finds the fetchable Nitro SSR wrapper before React Router's virtual build", () => {
-    const rootDir = path.resolve(process.cwd(), "templates/chat");
+    const repositoryRoot = path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      "../../../..",
+    );
+    const rootDir = path.join(repositoryRoot, "templates/chat");
 
     expect(_resolveNitroSsrServiceEntry(rootDir)).toBe(
       path.join(rootDir, "ssr-entry.ts"),
