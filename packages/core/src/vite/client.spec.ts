@@ -16,6 +16,7 @@ import {
   _installReactRouterVirtualInvalidationMirror,
   _mirrorReactRouterVirtualInvalidation,
   _nitroModuleGraphSignature,
+  _resolveNitroSsrServiceEntry,
   _nitroStartupGate,
   _nitroStartupRecovery,
   agentNative,
@@ -26,6 +27,17 @@ import {
 } from "./client.js";
 
 describe("Nitro dev startup recovery", () => {
+  it("finds the fetchable Nitro SSR wrapper before React Router's virtual build", () => {
+    const rootDir = path.resolve(process.cwd(), "templates/chat");
+
+    expect(_resolveNitroSsrServiceEntry(rootDir)).toBe(
+      path.join(rootDir, "ssr-entry.ts"),
+    );
+    expect(
+      _resolveNitroSsrServiceEntry(path.join(rootDir, "app")),
+    ).toBeUndefined();
+  });
+
   it("waits for Nitro's module graph to become stable", () => {
     const dependency = {
       id: "/app/server.ts",

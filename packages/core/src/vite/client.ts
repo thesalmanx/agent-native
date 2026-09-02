@@ -3428,11 +3428,40 @@ function getConfiguredAppBasePath(): { appBasePath: string; base: string } {
 function createNitroDevPlugin(
   options: Pick<ClientConfigOptions, "nitro">,
   appBasePath: string,
+  cwd = process.cwd(),
 ) {
   const nitroOptions = options.nitro ?? {};
+  const configuredExperimental = (
+    nitroOptions as { experimental?: Record<string, unknown> }
+  ).experimental;
+  const configuredVite = (
+    configuredExperimental as
+      | { vite?: { services?: Record<string, unknown> } }
+      | undefined
+  )?.vite;
+  const ssrEntry = resolveNitroSsrServiceEntry(
+    path.resolve(
+      cwd,
+      typeof nitroOptions.rootDir === "string" ? nitroOptions.rootDir : ".",
+    ),
+  );
   return nitroVitePlugin({
     serverDir: "./server",
     ...nitroOptions,
+    experimental: {
+      ...configuredExperimental,
+      ...(ssrEntry
+        ? {
+            vite: {
+              ...configuredVite,
+              services: {
+                ...configuredVite?.services,
+                ssr: configuredVite?.services?.ssr ?? { entry: ssrEntry },
+              },
+            },
+          }
+        : {}),
+    },
     replace: {
       ...(nitroOptions as { replace?: Record<string, string> }).replace,
       // Netlify's netlify.toml environment is available to the build but not
@@ -3468,6 +3497,14 @@ function createNitroDevPlugin(
         {}),
     },
   } as any);
+}
+
+function resolveNitroSsrServiceEntry(rootDir: string): string | undefined {
+  for (const extension of [".ts", ".tsx", ".js", ".jsx", ".mjs"]) {
+    const candidate = path.join(rootDir, `ssr-entry${extension}`);
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return undefined;
 }
 
 function arrayFrom<T>(value: T | T[] | undefined): T[] {
@@ -3740,7 +3777,7 @@ function createAgentNativePlugins(
   },
 ): any[] {
   const { appBasePath } = getConfiguredAppBasePath();
-  const nitroPlugin = createNitroDevPlugin(options, appBasePath);
+  const nitroPlugin = createNitroDevPlugin(options, appBasePath, process.cwd());
   const includeNitro = !isBuildCommand(command);
   const presetMarkerPlugin = nitroPresetMarkerPlugin(options);
 
@@ -4363,6 +4400,7 @@ export {
   nitroStartupGate as _nitroStartupGate,
   nitroStartupRecovery as _nitroStartupRecovery,
   nitroModuleGraphSignature as _nitroModuleGraphSignature,
+  resolveNitroSsrServiceEntry as _resolveNitroSsrServiceEntry,
   debounceNitroFullReloadHotUpdate as _debounceNitroFullReloadHotUpdate,
   installReactRouterVirtualInvalidationMirror as _installReactRouterVirtualInvalidationMirror,
   mirrorReactRouterVirtualInvalidation as _mirrorReactRouterVirtualInvalidation,
