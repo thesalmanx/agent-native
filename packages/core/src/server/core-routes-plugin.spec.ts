@@ -7,6 +7,7 @@ import {
   unregisterFileUploadProvider,
 } from "../file-upload/index.js";
 import type { FileUploadProvider } from "../file-upload/types.js";
+import type { H3AppShim } from "./framework-request-handler.js";
 import {
   BUILDER_CONNECT_PARAM,
   createBuilderConnectState,
@@ -34,7 +35,27 @@ import {
   readLegacyCoreRouteInitSettings,
   shouldRunCoreRouteBootDatabaseWork,
   ensureS3FileUploadProvider,
+  mountApplicationStateRoutes,
 } from "./core-routes-plugin.js";
+
+describe("mountApplicationStateRoutes", () => {
+  it("registers the compose matcher before generic application state", () => {
+    const routes: string[] = [];
+
+    const app = {
+      use(path: string, _handler: unknown) {
+        routes.push(path);
+      },
+    } as H3AppShim;
+
+    mountApplicationStateRoutes({}, "/_agent-native", app);
+
+    expect(routes).toEqual([
+      "/_agent-native/application-state/compose",
+      "/_agent-native/application-state",
+    ]);
+  });
+});
 
 describe("readLegacyCoreRouteInitSettings", () => {
   it("starts independent setting reads in parallel and isolates failures", async () => {

@@ -217,6 +217,7 @@ import { shouldReportError } from "./error-noise-filter.js";
 import {
   FRAMEWORK_AUTH_EARLY_PATHS,
   getH3App,
+  type H3AppShim,
   awaitBootstrap,
   markDefaultPluginProvided,
   markFrameworkRoutesReadyBeforeBootstrap,
@@ -1739,6 +1740,71 @@ export async function resolveOAuthCustodyBuilderKeyStatus(
   }
 }
 
+/**
+ * Mount application-state before the rest of core bootstrap. These handlers
+ * are request-scoped, so they do not need the optional startup work below;
+ * delaying them lets the Chat shell's localization and navigation writes fall
+ * through to the app router while a cold start is still initializing.
+ */
+export function mountApplicationStateRoutes(
+  nitroApp: any,
+  routePrefix: string = FRAMEWORK_ROUTE_PREFIX,
+  app: H3AppShim = getH3App(nitroApp),
+): void {
+  // Compose draft routes (more specific path, mounted first so the generic
+  // app-state matcher below doesn't shadow them). The framework strips the
+  // mount prefix from event.url.pathname before calling us, so we just see
+  // e.g. `/abc-123` (id) or `/` (collection root).
+  app.use(
+    `${routePrefix}/application-state/compose`,
+    defineEventHandler(async (event: H3Event) => {
+      const id =
+        (event.url?.pathname || "").replace(/^\/+/, "").split("/")[0] || "";
+      if (event.context) {
+        event.context.params = { ...event.context.params, id };
+      }
+      const method = getMethod(event);
+      if (!id) {
+        if (method === "GET") return listComposeDrafts(event);
+        if (method === "DELETE") return deleteAllComposeDrafts(event);
+      } else {
+        if (method === "GET") return getComposeDraft(event);
+        if (method === "PUT") return putComposeDraft(event);
+        if (method === "DELETE") return deleteComposeDraft(event);
+      }
+      setResponseStatus(event, 405);
+      return { error: "Method not allowed" };
+    }),
+  );
+
+  // Generic application state — match `/application-state/:key` only (NOT
+  // `/application-state/compose/...` which the handler above owns).
+  app.use(
+    `${routePrefix}/application-state`,
+    defineEventHandler(async (event: H3Event) => {
+      const key =
+        (event.url?.pathname || "").replace(/^\/+/, "").split("/")[0] || "";
+      // Skip — compose handler above already handled it.
+      if (key === "compose") return;
+      // Collection root: `GET ?keys=a,b,c` batches many single-key reads into
+      // one request (and one identity resolution).
+      if (key === "") {
+        if (getMethod(event) === "GET") return getStateMany(event);
+        return;
+      }
+      if (event.context) {
+        event.context.params = { ...event.context.params, key };
+      }
+      const method = getMethod(event);
+      if (method === "GET") return getState(event);
+      if (method === "PUT") return putState(event);
+      if (method === "DELETE") return deleteState(event);
+      setResponseStatus(event, 405);
+      return { error: "Method not allowed" };
+    }),
+  );
+}
+
 export function createCoreRoutesPlugin(
   options: CoreRoutesPluginOptions = {},
 ): NitroPluginDef {
@@ -1767,6 +1833,7 @@ export function createCoreRoutesPlugin(
       excludedPaths: [
         `${FRAMEWORK_ROUTE_PREFIX}/ping`,
         `${FRAMEWORK_ROUTE_PREFIX}/health`,
+        `${FRAMEWORK_ROUTE_PREFIX}/application-state`,
         ...FRAMEWORK_AUTH_EARLY_PATHS,
       ],
     });
@@ -1775,6 +1842,7 @@ export function createCoreRoutesPlugin(
       markFrameworkRoutesReadyBeforeBootstrap(nitroApp, [
         ...(!options.disablePing ? [`${P}/ping`] : []),
         ...(!options.disableHealth ? [`${P}/health`] : []),
+        ...(!options.disableAppState ? [`${P}/application-state`] : []),
       ]);
 
       // Keep the framework-owned S3-compatible provider available even when an
@@ -1807,6 +1875,10 @@ export function createCoreRoutesPlugin(
           return EMPTY_SPECULATION_RULES;
         }),
       );
+
+      if (!options.disableAppState) {
+        mountApplicationStateRoutes(nitroApp, P);
+      }
 
       // Keep liveness independent from the rest of framework bootstrap. A
       // cold-start database failure must report a useful ping/health result,
@@ -5023,63 +5095,6 @@ export function createCoreRoutesPlugin(
         );
       }
 
-      if (!options.disableAppState) {
-        // Compose draft routes (more specific path, mounted first so the
-        // generic app-state matcher below doesn't shadow them). The framework
-        // strips the mount prefix from event.url.pathname before calling us,
-        // so we just see e.g. `/abc-123` (id) or `/` (collection root).
-        getH3App(nitroApp).use(
-          `${P}/application-state/compose`,
-          defineEventHandler(async (event: H3Event) => {
-            const id =
-              (event.url?.pathname || "").replace(/^\/+/, "").split("/")[0] ||
-              "";
-            if (event.context) {
-              event.context.params = { ...event.context.params, id };
-            }
-            const method = getMethod(event);
-            if (!id) {
-              if (method === "GET") return listComposeDrafts(event);
-              if (method === "DELETE") return deleteAllComposeDrafts(event);
-            } else {
-              if (method === "GET") return getComposeDraft(event);
-              if (method === "PUT") return putComposeDraft(event);
-              if (method === "DELETE") return deleteComposeDraft(event);
-            }
-            setResponseStatus(event, 405);
-            return { error: "Method not allowed" };
-          }),
-        );
-
-        // Generic application state — match `/application-state/:key` only
-        // (NOT `/application-state/compose/...` which the handler above owns).
-        getH3App(nitroApp).use(
-          `${P}/application-state`,
-          defineEventHandler(async (event: H3Event) => {
-            const key =
-              (event.url?.pathname || "").replace(/^\/+/, "").split("/")[0] ||
-              "";
-            // Skip — compose handler above already handled it
-            if (key === "compose") return;
-            // Collection root: `GET ?keys=a,b,c` batches many single-key reads
-            // into one request (and one identity resolution) — the chat rail
-            // alone reads ~6 keys on every mount.
-            if (key === "") {
-              if (getMethod(event) === "GET") return getStateMany(event);
-              return;
-            }
-            if (event.context) {
-              event.context.params = { ...event.context.params, key };
-            }
-            const method = getMethod(event);
-            if (method === "GET") return getState(event);
-            if (method === "PUT") return putState(event);
-            if (method === "DELETE") return deleteState(event);
-            setResponseStatus(event, 405);
-            return { error: "Method not allowed" };
-          }),
-        );
-      }
       resolveInit();
     } catch (error) {
       // Do NOT rethrow. Nitro invokes plugins as `try { plugin(app) } catch`,
