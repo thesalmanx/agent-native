@@ -37,7 +37,6 @@ import {
   IconArrowsMaximize,
   IconExternalLink,
   IconShare3,
-  IconBulb,
 } from "@tabler/icons-react";
 import React, {
   useState,
@@ -63,13 +62,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuShortcut,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "./components/ui/dropdown-menu.js";
 import { normalizeTooltipText } from "./components/ui/tooltip.js";
@@ -77,10 +71,7 @@ import { ErrorReportActions } from "./ErrorReportActions.js";
 import { FeedbackButton, resolveFeedbackUrl } from "./FeedbackButton.js";
 import { RunsTrayMenuItem } from "./progress/RunsTray.js";
 import { ShareButton } from "./sharing/ShareButton.js";
-import {
-  ThinkingDisplayProvider,
-  useThinkingDisplayControl,
-} from "./thinking-display.js";
+import { ThinkingDisplayProvider } from "./thinking-display.js";
 // Lazy-load the full assistant-ui chat stack (tiptap composer + react-markdown +
 // assistant-ui + zod block schemas) so it is NOT in the static import closure of
 // every page. The header/tab chrome renders immediately; chat streams in once the
@@ -170,6 +161,20 @@ export function shouldHandleAgentSidebarToggle(
   const detail = (event as CustomEvent<{ scopeId?: unknown }>).detail;
   if (!detail || detail.scopeId === undefined) return true;
   return typeof detail.scopeId === "string" && detail.scopeId === toggleScopeId;
+}
+
+export function shouldHandleAgentPanelChatShortcut(
+  target: EventTarget | null,
+): boolean {
+  const element = target as HTMLElement | null;
+  if (!element) return true;
+  return !(
+    element.tagName === "INPUT" ||
+    element.tagName === "TEXTAREA" ||
+    element.tagName === "SELECT" ||
+    element.isContentEditable ||
+    element.closest?.("[contenteditable]")
+  );
 }
 
 function postPerAppChatSidebarStateToEmbeddedFrames(open: boolean): void {
@@ -386,51 +391,6 @@ interface AvailableCli {
   command: string;
   label: string;
   available: boolean;
-}
-
-/**
- * Reasoning visibility for this browser. Absent when a host pinned the mode
- * through `thinkingDisplay`, so the menu never offers a control that cannot
- * change anything.
- */
-function ThinkingDisplayMenuItem() {
-  const t = useT();
-  const { mode, setMode, pinned } = useThinkingDisplayControl();
-  if (pinned) return null;
-  return (
-    <DropdownMenuSub>
-      <DropdownMenuSubTrigger>
-        <IconBulb size={14} className="shrink-0" />
-        {t("agentChat.thinking.display")}
-      </DropdownMenuSubTrigger>
-      <DropdownMenuSubContent>
-        <DropdownMenuRadioGroup
-          value={mode}
-          onValueChange={(next) => {
-            // The radio group hands back a bare string; anything that is not a
-            // known mode would silently persist and read back as the default.
-            if (
-              next === "expanded" ||
-              next === "collapsed" ||
-              next === "hidden"
-            ) {
-              setMode(next);
-            }
-          }}
-        >
-          <DropdownMenuRadioItem value="expanded">
-            {t("agentChat.thinking.expanded")}
-          </DropdownMenuRadioItem>
-          <DropdownMenuRadioItem value="collapsed">
-            {t("agentChat.thinking.collapsed")}
-          </DropdownMenuRadioItem>
-          <DropdownMenuRadioItem value="hidden">
-            {t("agentChat.thinking.hidden")}
-          </DropdownMenuRadioItem>
-        </DropdownMenuRadioGroup>
-      </DropdownMenuSubContent>
-    </DropdownMenuSub>
-  );
 }
 
 function useAvailableClis() {
@@ -842,6 +802,8 @@ export interface AgentPanelProps extends Omit<
   onNewCliTab?: () => void;
   /** Return from a desktop-owned CLI tab to a UI chat tab. */
   onNewUiTab?: () => void;
+  /** Render a host-owned CLI tab; the built-in terminal is used when omitted. */
+  renderCliTab?: (input: { id: string; active: boolean }) => React.ReactNode;
   /** Select the mode used by the chat sidebar's new-tab affordances. */
   newTabMode?: "ui" | "cli";
   /** Host-owned label for the desktop CLI tab action. */
@@ -1045,6 +1007,7 @@ function AgentPanelInner({
   onOpenSettings,
   onNewCliTab,
   onNewUiTab,
+  renderCliTab,
   newTabMode = "ui",
   newCliTabLabel,
   newUiTabLabel,
@@ -1140,6 +1103,12 @@ function AgentPanelInner({
     },
     [chatOnly],
   );
+  const previousDefaultModeRef = useRef(defaultMode);
+  useEffect(() => {
+    if (previousDefaultModeRef.current === defaultMode) return;
+    previousDefaultModeRef.current = defaultMode;
+    switchMode(defaultMode);
+  }, [defaultMode, switchMode]);
   useEffect(() => {
     const nextMode = normalizeAgentPanelModeForSurface(mode, chatOnly);
     if (nextMode !== mode) switchMode(nextMode);
@@ -1207,13 +1176,43 @@ function AgentPanelInner({
   // CLI terminal tabs (ephemeral — not persisted to SQL)
   const [cliTabs, setCliTabs] = useState<string[]>(["cli-1"]);
   const [activeCliTab, setActiveCliTab] = useState("cli-1");
+  const [mountedCliTabs, setMountedCliTabs] = useState<string[]>([]);
   const cliCounter = useRef(1);
+
+  useEffect(() => {
+    if (mode !== "cli" || !activeCliTab) return;
+    setMountedCliTabs((current) =>
+      current.includes(activeCliTab) ? current : [...current, activeCliTab],
+    );
+  }, [activeCliTab, mode]);
 
   const addCliTab = useCallback(() => {
     const id = `cli-${++cliCounter.current}`;
     setCliTabs((prev) => [...prev, id]);
     setActiveCliTab(id);
   }, []);
+  const openNewCliTab = useCallback(() => {
+    if (onNewCliTab) {
+      onNewCliTab();
+      return;
+    }
+    addCliTab();
+    switchMode("cli");
+  }, [addCliTab, onNewCliTab, switchMode]);
+  const openNewUiTab = useCallback(
+    (addTab: () => void) => {
+      if (onNewUiTab) {
+        onNewUiTab();
+        return;
+      }
+      addTab();
+      switchMode("chat");
+    },
+    [onNewUiTab, switchMode],
+  );
+  const cliTabsToRender = renderCliTab
+    ? cliTabs.filter((id) => mountedCliTabs.includes(id))
+    : cliTabs;
 
   const closeCliTab = useCallback(
     (id: string) => {
@@ -1307,7 +1306,8 @@ function AgentPanelInner({
   // there happens via Builder, and the CLI panel only offers a Download
   // Desktop CTA, which adds clutter without value.
   const showCliMode =
-    (isDevMode || !codeAccessEnabled) && isCodeEditingChatSurface;
+    Boolean(renderCliTab) ||
+    ((isDevMode || !codeAccessEnabled) && isCodeEditingChatSurface);
   useEffect(() => {
     if (mode === "cli" && !showCliMode) switchMode("chat");
   }, [mode, showCliMode, switchMode]);
@@ -1556,17 +1556,15 @@ function AgentPanelInner({
             content={
               newTabMode === "cli" && newCliTabLabel
                 ? newCliTabLabel
-                : t("agentPanel.newChat")
+                : (newUiTabLabel ?? t("agentPanel.newChat"))
             }
           >
             <button
-              onClick={
-                newTabMode === "cli" && onNewCliTab ? onNewCliTab : addTab
-              }
+              onClick={newTabMode === "cli" ? openNewCliTab : addTab}
               aria-label={
                 newTabMode === "cli" && newCliTabLabel
                   ? newCliTabLabel
-                  : t("agentPanel.newChat")
+                  : (newUiTabLabel ?? t("agentPanel.newChat"))
               }
               className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-accent/50"
             >
@@ -1574,10 +1572,10 @@ function AgentPanelInner({
             </button>
           </IconTooltip>
         )}
-        {!onCollapse && mode === "cli" && canUseCodeTools && (
+        {mode === "cli" && (canUseCodeTools || renderCliTab) && (
           <IconTooltip content={t("agentPanel.newTerminal")}>
             <button
-              onClick={addCliTab}
+              onClick={openNewCliTab}
               aria-label={t("agentPanel.newTerminal")}
               className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-accent/50"
             >
@@ -1655,47 +1653,35 @@ function AgentPanelInner({
             fullViewAction ? (
               <DropdownMenuSeparator />
             ) : null}
-            {onCollapse && mode === "chat" && (
-              <>
-                <DropdownMenuItem
-                  onSelect={
-                    newTabMode === "cli" && onNewUiTab ? onNewUiTab : addTab
-                  }
-                >
-                  <IconPlus size={14} className="shrink-0" />
-                  {newTabMode === "cli"
-                    ? (newUiTabLabel ?? t("agentPanel.newChat"))
-                    : t("agentPanel.newChat")}
-                </DropdownMenuItem>
-                {(() => {
-                  const activeTab = activeChatSessionId
-                    ? tabs.find((tab) => tab.id === activeChatSessionId)
-                    : undefined;
-                  if (
-                    !activeTab ||
-                    (activeTabMessageCount <= 0 && activeTab.status === "idle")
-                  ) {
-                    return null;
-                  }
-                  return (
-                    // ShareButton's content is portalled, so open it only
-                    // after the menu releases its dismissable layer.
-                    <DropdownMenuItem
-                      onSelect={(event) =>
-                        deferAgentPanelOverlayOpen(
-                          event,
-                          closeHeaderMenuForOverlay,
-                          () => setShareFromMenuOpen(true),
-                        )
-                      }
-                    >
-                      <IconShare3 size={14} className="shrink-0" />
-                      Share
-                    </DropdownMenuItem>
-                  );
-                })()}
-              </>
+            {onCollapse &&
+              (newTabMode === "cli" || (mode === "cli" && renderCliTab)) && (
+                <>
+                  <DropdownMenuItem onSelect={() => openNewUiTab(addTab)}>
+                    <IconPlus size={14} className="shrink-0" />
+                    {newUiTabLabel ?? t("agentPanel.newChat")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={openNewCliTab}>
+                    <IconTerminal2 size={14} className="shrink-0" />
+                    {newCliTabLabel ?? t("agentPanel.newTerminal")}
+                  </DropdownMenuItem>
+                  {mode === "chat" ? <DropdownMenuSeparator /> : null}
+                </>
+              )}
+            {onCollapse && mode === "chat" && newTabMode !== "cli" && (
+              <DropdownMenuItem onSelect={() => openNewUiTab(addTab)}>
+                <IconPlus size={14} className="shrink-0" />
+                {newUiTabLabel ?? t("agentPanel.newChat")}
+              </DropdownMenuItem>
             )}
+            {onCollapse &&
+            mode === "chat" &&
+            renderCliTab &&
+            newTabMode !== "cli" ? (
+              <DropdownMenuItem onSelect={openNewCliTab}>
+                <IconTerminal2 size={14} className="shrink-0" />
+                {newCliTabLabel ?? t("agentPanel.newTerminal")}
+              </DropdownMenuItem>
+            ) : null}
             {mode === "chat" &&
             newTabMode !== "cli" &&
             onNewCliTab &&
@@ -1705,6 +1691,33 @@ function AgentPanelInner({
                 {newCliTabLabel}
               </DropdownMenuItem>
             ) : null}
+            {onCollapse &&
+              mode === "chat" &&
+              (() => {
+                const activeTab = activeChatSessionId
+                  ? tabs.find((tab) => tab.id === activeChatSessionId)
+                  : undefined;
+                if (
+                  !activeTab ||
+                  (activeTabMessageCount <= 0 && activeTab.status === "idle")
+                ) {
+                  return null;
+                }
+                return (
+                  <DropdownMenuItem
+                    onSelect={(event) =>
+                      deferAgentPanelOverlayOpen(
+                        event,
+                        closeHeaderMenuForOverlay,
+                        () => setShareFromMenuOpen(true),
+                      )
+                    }
+                  >
+                    <IconShare3 size={14} className="shrink-0" />
+                    Share
+                  </DropdownMenuItem>
+                );
+              })()}
             {mode === "chat" && toggleHistory && (
               <DropdownMenuItem
                 onSelect={(event) =>
@@ -1753,7 +1766,6 @@ function AgentPanelInner({
                 <DropdownMenuSeparator />
               </>
             )}
-            {mode === "chat" && <ThinkingDisplayMenuItem />}
             {feedbackEnabled ? (
               <DropdownMenuItem
                 onSelect={(event) =>
@@ -1769,7 +1781,9 @@ function AgentPanelInner({
               </DropdownMenuItem>
             ) : null}
             {((mode === "chat" && activeTabId) ||
-              (mode === "cli" && canUseCodeTools && activeCliTab)) && (
+              (mode === "cli" &&
+                (canUseCodeTools || renderCliTab) &&
+                activeCliTab)) && (
               <>
                 <DropdownMenuSeparator />
                 {mode === "chat" ? (
@@ -1859,6 +1873,9 @@ function AgentPanelInner({
       headerMenuOpen,
       isWideDrawer,
       mode,
+      newTabMode,
+      newCliTabLabel,
+      newUiTabLabel,
       agentPageHref,
       fullViewAction,
       onCollapse,
@@ -1866,6 +1883,9 @@ function AgentPanelInner({
       onExitWideDrawer,
       onSnapTo75Percent,
       openRunThread,
+      openNewCliTab,
+      openNewUiTab,
+      renderCliTab,
       selectCli,
       selectedCli,
       shareFromMenuOpen,
@@ -2066,6 +2086,105 @@ function AgentPanelInner({
         Boolean(onCollapse) &&
         mode === "chat" &&
         shouldShowAgentPanelSidebarChatTabs(tabs);
+      const showUnifiedSurfaceTabs = Boolean(
+        onCollapse && renderCliTab && showTabBar,
+      );
+      const renderUnifiedSurfaceTabs = () => (
+        <div
+          className="agent-tabs-scroll flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto"
+          role="tablist"
+          aria-label={t("agentPanel.panelOptions")}
+          data-agent-panel-surface-tabs
+        >
+          {mainTabs.map((tab) => {
+            const isActive =
+              mode === "chat" &&
+              (tab.id === activeTabId ||
+                (tab.id === focusParentId &&
+                  activeTab?.parentThreadId === tab.id));
+            return (
+              <div key={tab.id} className="relative flex shrink-0 items-center">
+                <div
+                  role="tab"
+                  tabIndex={0}
+                  aria-selected={isActive}
+                  ref={isActive ? activeTabRefCb : undefined}
+                  onClick={() => {
+                    setActiveTabId(tab.id);
+                    switchMode("chat");
+                  }}
+                  onKeyDown={activateOnKeyDown(() => {
+                    setActiveTabId(tab.id);
+                    switchMode("chat");
+                  })}
+                  className={cn(
+                    "agent-tab relative flex shrink-0 items-center gap-1 rounded-md px-2.5 py-1.5 text-[11px] font-medium cursor-pointer min-w-[56px] max-w-[150px]",
+                    isActive
+                      ? "bg-accent text-foreground"
+                      : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                  )}
+                >
+                  <span className="truncate pe-1">{tab.label}</span>
+                  {tab.status === "running" && (
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/50 animate-pulse" />
+                  )}
+                </div>
+                <button
+                  type="button"
+                  aria-label={t("agentPanel.closeTab")}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    closeTab(tab.id);
+                  }}
+                  className="agent-tab-close flex items-center justify-end text-muted-foreground hover:text-foreground"
+                >
+                  <IconX size={10} />
+                </button>
+              </div>
+            );
+          })}
+          {cliTabs.map((id, index) => {
+            const isActive = mode === "cli" && id === activeCliTab;
+            return (
+              <div key={id} className="relative flex shrink-0 items-center">
+                <div
+                  role="tab"
+                  tabIndex={0}
+                  aria-selected={isActive}
+                  ref={isActive ? activeTabRefCb : undefined}
+                  onClick={() => {
+                    setActiveCliTab(id);
+                    switchMode("cli");
+                  }}
+                  onKeyDown={activateOnKeyDown(() => {
+                    setActiveCliTab(id);
+                    switchMode("cli");
+                  })}
+                  className={cn(
+                    "agent-tab relative flex shrink-0 items-center gap-1 rounded-md px-2.5 py-1.5 text-[11px] font-medium cursor-pointer min-w-[56px]",
+                    isActive
+                      ? "bg-accent text-foreground"
+                      : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                  )}
+                >
+                  <span>Terminal {index + 1}</span>
+                </div>
+                <button
+                  type="button"
+                  aria-label={t("agentPanel.closeTab")}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    closeCliTab(id);
+                  }}
+                  className="agent-tab-close flex items-center justify-end text-muted-foreground hover:text-foreground"
+                >
+                  <IconX size={10} />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      );
 
       return (
         <div
@@ -2084,7 +2203,9 @@ function AgentPanelInner({
             style={AGENT_PANEL_HEADER_STYLE}
           >
             <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
-              {showSidebarChatTabs ? (
+              {showUnifiedSurfaceTabs ? (
+                renderUnifiedSurfaceTabs()
+              ) : showSidebarChatTabs ? (
                 <div className="agent-tabs-scroll flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto">
                   {mainTabs.map((tab) => {
                     const isActive =
@@ -2092,26 +2213,27 @@ function AgentPanelInner({
                       (tab.id === focusParentId &&
                         activeTab?.parentThreadId === tab.id);
                     return (
-                      <div
-                        key={tab.id}
-                        role="button"
-                        tabIndex={0}
-                        ref={isActive ? activeTabRefCb : undefined}
-                        onClick={() => setActiveTabId(tab.id)}
-                        onKeyDown={activateOnKeyDown(() =>
-                          setActiveTabId(tab.id),
-                        )}
-                        className={cn(
-                          "agent-tab relative flex shrink-0 items-center gap-1 rounded-md px-2.5 py-1.5 text-[11px] font-medium cursor-pointer min-w-[56px] max-w-[150px]",
-                          isActive
-                            ? "bg-accent text-foreground"
-                            : "text-muted-foreground hover:bg-accent hover:text-foreground",
-                        )}
-                      >
-                        <span className="truncate pe-1">{tab.label}</span>
-                        {tab.status === "running" && (
-                          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/50 animate-pulse" />
-                        )}
+                      <div key={tab.id} className="relative shrink-0">
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          ref={isActive ? activeTabRefCb : undefined}
+                          onClick={() => setActiveTabId(tab.id)}
+                          onKeyDown={activateOnKeyDown(() =>
+                            setActiveTabId(tab.id),
+                          )}
+                          className={cn(
+                            "agent-tab relative flex shrink-0 items-center gap-1 rounded-md px-2.5 py-1.5 text-[11px] font-medium cursor-pointer min-w-[56px] max-w-[150px]",
+                            isActive
+                              ? "bg-accent text-foreground"
+                              : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                          )}
+                        >
+                          <span className="truncate pe-1">{tab.label}</span>
+                          {tab.status === "running" && (
+                            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/50 animate-pulse" />
+                          )}
+                        </div>
                         <button
                           type="button"
                           aria-label={t("agentPanel.closeTab")}
@@ -2163,14 +2285,16 @@ function AgentPanelInner({
           ) : null}
           {/* Tab bar: only visible when there is actually more than one tab to switch between. */}
           {showTabBar &&
-            (mode === "chat" || (mode === "cli" && canUseCodeTools)) &&
+            !showUnifiedSurfaceTabs &&
+            (mode === "chat" ||
+              (mode === "cli" && (canUseCodeTools || renderCliTab))) &&
             (() => {
               const showChatTabBar =
                 mode === "chat" &&
                 shouldShowAgentPanelChatTabBar(tabs, activeTabId);
               const showCliTabBar =
                 mode === "cli" &&
-                canUseCodeTools &&
+                (canUseCodeTools || renderCliTab) &&
                 shouldShowAgentPanelCliTabBar(cliTabs);
 
               if (!showChatTabBar && !showCliTabBar) return null;
@@ -2188,28 +2312,29 @@ function AgentPanelInner({
                                 (tab.id === focusParentId &&
                                   activeTab?.parentThreadId === tab.id);
                               return (
-                                <div
-                                  key={tab.id}
-                                  role="button"
-                                  tabIndex={0}
-                                  ref={isActive ? activeTabRefCb : undefined}
-                                  onClick={() => setActiveTabId(tab.id)}
-                                  onKeyDown={activateOnKeyDown(() =>
-                                    setActiveTabId(tab.id),
-                                  )}
-                                  className={cn(
-                                    "agent-tab relative flex shrink-0 items-center gap-1 rounded-md px-2.5 py-1.5 text-[11px] font-medium cursor-pointer min-w-[56px] max-w-[150px]",
-                                    isActive
-                                      ? "bg-accent text-foreground"
-                                      : "text-muted-foreground hover:bg-accent hover:text-foreground",
-                                  )}
-                                >
-                                  <span className="truncate pe-1">
-                                    {tab.label}
-                                  </span>
-                                  {tab.status === "running" && (
-                                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/50 animate-pulse" />
-                                  )}
+                                <div key={tab.id} className="relative shrink-0">
+                                  <div
+                                    role="button"
+                                    tabIndex={0}
+                                    ref={isActive ? activeTabRefCb : undefined}
+                                    onClick={() => setActiveTabId(tab.id)}
+                                    onKeyDown={activateOnKeyDown(() =>
+                                      setActiveTabId(tab.id),
+                                    )}
+                                    className={cn(
+                                      "agent-tab relative flex shrink-0 items-center gap-1 rounded-md px-2.5 py-1.5 text-[11px] font-medium cursor-pointer min-w-[56px] max-w-[150px]",
+                                      isActive
+                                        ? "bg-accent text-foreground"
+                                        : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                                    )}
+                                  >
+                                    <span className="truncate pe-1">
+                                      {tab.label}
+                                    </span>
+                                    {tab.status === "running" && (
+                                      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/50 animate-pulse" />
+                                    )}
+                                  </div>
                                   <button
                                     type="button"
                                     aria-label={t("agentPanel.closeTab")}
@@ -2236,27 +2361,28 @@ function AgentPanelInner({
                               );
                             })
                           : cliTabs.map((id, i) => (
-                              <div
-                                key={id}
-                                role="button"
-                                tabIndex={0}
-                                ref={
-                                  id === activeCliTab
-                                    ? activeTabRefCb
-                                    : undefined
-                                }
-                                onClick={() => setActiveCliTab(id)}
-                                onKeyDown={activateOnKeyDown(() =>
-                                  setActiveCliTab(id),
-                                )}
-                                className={cn(
-                                  "agent-tab relative flex shrink-0 items-center gap-1 rounded-md px-2.5 py-1.5 text-[11px] font-medium cursor-pointer min-w-[56px]",
-                                  id === activeCliTab
-                                    ? "bg-accent text-foreground"
-                                    : "text-muted-foreground hover:bg-accent hover:text-foreground",
-                                )}
-                              >
-                                <span>Terminal {i + 1}</span>
+                              <div key={id} className="relative shrink-0">
+                                <div
+                                  role="button"
+                                  tabIndex={0}
+                                  ref={
+                                    id === activeCliTab
+                                      ? activeTabRefCb
+                                      : undefined
+                                  }
+                                  onClick={() => setActiveCliTab(id)}
+                                  onKeyDown={activateOnKeyDown(() =>
+                                    setActiveCliTab(id),
+                                  )}
+                                  className={cn(
+                                    "agent-tab relative flex shrink-0 items-center gap-1 rounded-md px-2.5 py-1.5 text-[11px] font-medium cursor-pointer min-w-[56px]",
+                                    id === activeCliTab
+                                      ? "bg-accent text-foreground"
+                                      : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                                  )}
+                                >
+                                  <span>Terminal {i + 1}</span>
+                                </div>
                                 <button
                                   type="button"
                                   aria-label={t("agentPanel.closeTab")}
@@ -2310,32 +2436,33 @@ function AgentPanelInner({
                           Main
                         </div>
                         {childTabs.map((tab) => (
-                          <div
-                            key={tab.id}
-                            role="button"
-                            tabIndex={0}
-                            ref={
-                              tab.id === activeTabId
-                                ? activeTabRefCb
-                                : undefined
-                            }
-                            onClick={() => setActiveTabId(tab.id)}
-                            onKeyDown={activateOnKeyDown(() =>
-                              setActiveTabId(tab.id),
-                            )}
-                            className={cn(
-                              "agent-tab relative flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium cursor-pointer min-w-[48px] max-w-[140px]",
-                              tab.id === activeTabId
-                                ? "bg-accent text-foreground"
-                                : "text-muted-foreground hover:bg-accent hover:text-foreground",
-                            )}
-                          >
-                            <span className="truncate pe-1">
-                              {tab.subAgentName || tab.label}
-                            </span>
-                            {tab.status === "running" && (
-                              <span className="h-1 w-1 shrink-0 rounded-full bg-muted-foreground/50 animate-pulse" />
-                            )}
+                          <div key={tab.id} className="relative shrink-0">
+                            <div
+                              role="button"
+                              tabIndex={0}
+                              ref={
+                                tab.id === activeTabId
+                                  ? activeTabRefCb
+                                  : undefined
+                              }
+                              onClick={() => setActiveTabId(tab.id)}
+                              onKeyDown={activateOnKeyDown(() =>
+                                setActiveTabId(tab.id),
+                              )}
+                              className={cn(
+                                "agent-tab relative flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium cursor-pointer min-w-[48px] max-w-[140px]",
+                                tab.id === activeTabId
+                                  ? "bg-accent text-foreground"
+                                  : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                              )}
+                            >
+                              <span className="truncate pe-1">
+                                {tab.subAgentName || tab.label}
+                              </span>
+                              {tab.status === "running" && (
+                                <span className="h-1 w-1 shrink-0 rounded-full bg-muted-foreground/50 animate-pulse" />
+                              )}
+                            </div>
                             <button
                               type="button"
                               aria-label={t("agentPanel.closeTab")}
@@ -2384,6 +2511,8 @@ function AgentPanelInner({
       activeTabRefCb,
       activateOnKeyDown,
       closeCliTab,
+      renderCliTab,
+      switchMode,
       t,
     ],
   );
@@ -2515,54 +2644,60 @@ function AgentPanelInner({
         </div>
 
         {/* CLI terminals — code-capable dev mode: real terminal, otherwise handoff. */}
-        {canUseCodeTools
-          ? mode === "cli" &&
-            cliTabs.map((id) => (
-              <div
-                key={id}
-                className="min-h-0 relative flex-1"
-                style={{
-                  display: id === activeCliTab ? undefined : "none",
-                }}
+        {(canUseCodeTools || renderCliTab) &&
+          (mode === "cli" || Boolean(renderCliTab)) &&
+          cliTabsToRender.map((id) => (
+            <div
+              key={id}
+              className="min-h-0 relative flex-1"
+              style={{
+                display:
+                  mode === "cli" && id === activeCliTab ? undefined : "none",
+              }}
+            >
+              <Suspense
+                fallback={
+                  <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+                    {t("agentPanel.loadingTerminal")}
+                  </div>
+                }
               >
-                <Suspense
-                  fallback={
-                    <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-                      {t("agentPanel.loadingTerminal")}
-                    </div>
-                  }
-                >
+                {renderCliTab ? (
+                  renderCliTab({
+                    id,
+                    active: mode === "cli" && id === activeCliTab,
+                  })
+                ) : (
                   <AgentTerminal
                     command={selectedCli}
                     hideInFrame={false}
                     className="h-full"
                     style={{ background: "transparent" }}
                   />
-                </Suspense>
-              </div>
-            ))
-          : mode === "cli" && (
-              <div className="flex flex-1 flex-col items-center justify-center min-h-0 px-6 gap-3">
-                <CodeAccessUnavailablePanel
-                  title={
-                    codeAccessEnabled
-                      ? t("agentPanel.cliRequiresDevMode")
-                      : codeUnavailableTitle
-                  }
-                  description={
-                    codeAccessEnabled
-                      ? t("agentPanel.cliRequiresDevModeDescription")
-                      : codeUnavailableDescription
-                  }
-                  ctaLabel={codeUnavailableCtaLabel}
-                  ctaHref={
-                    codeAccessEnabled ? undefined : codeUnavailableCtaHref
-                  }
-                  secondaryCtaLabel={codeUnavailableSecondaryCtaLabel}
-                  secondaryCtaHref={codeUnavailableSecondaryCtaHref}
-                />
-              </div>
-            )}
+                )}
+              </Suspense>
+            </div>
+          ))}
+        {!canUseCodeTools && !renderCliTab && mode === "cli" && (
+          <div className="flex flex-1 flex-col items-center justify-center min-h-0 px-6 gap-3">
+            <CodeAccessUnavailablePanel
+              title={
+                codeAccessEnabled
+                  ? t("agentPanel.cliRequiresDevMode")
+                  : codeUnavailableTitle
+              }
+              description={
+                codeAccessEnabled
+                  ? t("agentPanel.cliRequiresDevModeDescription")
+                  : codeUnavailableDescription
+              }
+              ctaLabel={codeUnavailableCtaLabel}
+              ctaHref={codeAccessEnabled ? undefined : codeUnavailableCtaHref}
+              secondaryCtaLabel={codeUnavailableSecondaryCtaLabel}
+              secondaryCtaHref={codeUnavailableSecondaryCtaHref}
+            />
+          </div>
+        )}
 
         {/* Resources view */}
         {mode === "resources" && (
@@ -3274,6 +3409,8 @@ export interface AgentSidebarProps {
   chatViewTransitionHandoff?: boolean;
   /** Namespace for persisted chat state. Use the same key as AgentChatHome. */
   storageKey?: string;
+  /** Initial mode for the sidebar. Default: "chat" */
+  defaultMode?: "chat" | "cli";
   /** Restore the previously active chat thread on mount. Default: true. */
   restoreActiveThread?: boolean;
   /** Namespace for the persisted open/closed preference. Defaults to storageKey. */
@@ -3302,6 +3439,8 @@ export interface AgentSidebarProps {
   onNewCliTab?: () => void;
   /** Return from a desktop-owned CLI tab to a UI chat tab. */
   onNewUiTab?: () => void;
+  /** Render a host-owned CLI tab; the built-in terminal is used when omitted. */
+  renderCliTab?: (input: { id: string; active: boolean }) => React.ReactNode;
   /** Select the mode used by the chat sidebar's new-tab affordances. */
   newTabMode?: "ui" | "cli";
   /** Host-owned label for the desktop CLI tab action. */
@@ -3328,6 +3467,8 @@ export interface AgentSidebarProps {
   suppressFirstRunOnboarding?: boolean;
   /** Pin how much model reasoning the chat shows. Omit to let the reader choose. */
   thinkingDisplay?: AssistantChatProps["thinkingDisplay"];
+  /** Keep the sidebar on chat mode. Defaults to true for embedded app sidebars. */
+  chatOnly?: boolean;
 }
 
 interface HostedHarnessStatus {
@@ -3343,6 +3484,7 @@ export function AgentSidebar({
   children,
   enabled = true,
   emptyStateText = "How can I help you?",
+  defaultMode = "chat",
   suggestions,
   dynamicSuggestions,
   composerToolbarSlot,
@@ -3382,6 +3524,7 @@ export function AgentSidebar({
   onOpenSettings,
   onNewCliTab,
   onNewUiTab,
+  renderCliTab,
   newTabMode = "ui",
   newCliTabLabel,
   newUiTabLabel,
@@ -3395,6 +3538,7 @@ export function AgentSidebar({
   agentPageHref,
   suppressFirstRunOnboarding = false,
   thinkingDisplay,
+  chatOnly = true,
 }: AgentSidebarProps) {
   const staticHostedHarnessEnabled = isHostedHarnessConfigured(
     injectedAgentNativeConfig().harness,
@@ -3892,6 +4036,7 @@ export function AgentSidebar({
         return;
       }
       if ((e.metaKey || e.ctrlKey) && e.key === "i") {
+        if (!shouldHandleAgentPanelChatShortcut(e.target)) return;
         e.preventDefault();
         let selectionText = "";
         try {
@@ -4204,6 +4349,7 @@ export function AgentSidebar({
             suppressInlineOpenApp={suppressInlineOpenApp}
             composerPlaceholder={composerPlaceholder}
             missingApiKeySetupLayout="sidebar"
+            defaultMode={defaultMode}
             onCollapse={() => setOpenPersisted(false)}
             onSnapTo75Percent={isMobile ? undefined : snapTo75Percent}
             isWideDrawer={isMobile ? false : isWideDrawer}
@@ -4212,6 +4358,7 @@ export function AgentSidebar({
             onOpenSettings={onOpenSettings}
             onNewCliTab={onNewCliTab}
             onNewUiTab={onNewUiTab}
+            renderCliTab={renderCliTab}
             newTabMode={newTabMode}
             newCliTabLabel={newCliTabLabel}
             newUiTabLabel={newUiTabLabel}
@@ -4225,7 +4372,7 @@ export function AgentSidebar({
             threadUrlSync={threadUrlSync}
             agentPageHref={agentPageHref}
             thinkingDisplay={thinkingDisplay}
-            chatOnly
+            chatOnly={chatOnly}
           />
         </div>
       </div>

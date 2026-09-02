@@ -43,6 +43,41 @@ export interface McpConnectionSuggestionProps {
   onOAuthStart?: (url: string) => void | Promise<void>;
 }
 
+const DISMISSED_MCP_SUGGESTIONS_STORAGE_KEY =
+  "agent-native:mcp-connection-suggestions-dismissed";
+
+function readDismissedMcpSuggestionIds(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(
+      DISMISSED_MCP_SUGGESTIONS_STORAGE_KEY,
+    );
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter((value): value is string => typeof value === "string")
+      : [];
+  } catch {
+    // coercion-ok: unavailable browser storage means no persisted dismissals.
+    return [];
+  }
+}
+
+function rememberMcpSuggestionDismissal(id: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const ids = readDismissedMcpSuggestionIds();
+    if (ids.includes(id)) return;
+    window.localStorage.setItem(
+      DISMISSED_MCP_SUGGESTIONS_STORAGE_KEY,
+      JSON.stringify([...ids, id]),
+    );
+  } catch {
+    // coercion-ok: unavailable browser storage only skips persistence.
+    return;
+  }
+}
+
 function visibleUserAuthoredText(text: string): string {
   return text
     .replace(/<context\b[^>]*>[\s\S]*?<\/context>\n?/gi, "")
@@ -152,7 +187,9 @@ export function McpConnectionSuggestion({
   const [quickConnectIntegrationId, setQuickConnectIntegrationId] = useState<
     string | null
   >(null);
-  const [dismissedId, setDismissedId] = useState<string | null>(null);
+  const [dismissedIds, setDismissedIds] = useState(
+    readDismissedMcpSuggestionIds,
+  );
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const oauthStartingRef = useRef(false);
@@ -193,7 +230,7 @@ export function McpConnectionSuggestion({
     mcpServersQuery.isSuccess &&
     integration &&
     !connected &&
-    dismissedId !== integration.id &&
+    !dismissedIds.includes(integration.id) &&
     (Boolean(integrationId) ||
       variant === "composer" ||
       isMcpConnectionFailureText(text) ||
@@ -273,9 +310,13 @@ export function McpConnectionSuggestion({
             if (connecting) return;
             setError(null);
             setConnecting(true);
-            void Promise.resolve()
-              .then(() => onDismiss?.())
-              .then(() => setDismissedId(integration.id))
+            setDismissedIds((current) =>
+              current.includes(integration.id)
+                ? current
+                : [...current, integration.id],
+            );
+            rememberMcpSuggestionDismissal(integration.id);
+            void Promise.resolve(onDismiss?.())
               .catch((cause: unknown) => {
                 setError(
                   cause instanceof Error ? cause.message : String(cause),
@@ -327,7 +368,11 @@ export function McpConnectionSuggestion({
             : undefined
         }
         onCreated={() => {
-          setDismissedId(integration.id);
+          setDismissedIds((current) =>
+            current.includes(integration.id)
+              ? current
+              : [...current, integration.id],
+          );
           saveMcpConnectionResume(variant === "response" ? contextText : text);
           notifyMcpConnectionComplete();
           onConnected?.();

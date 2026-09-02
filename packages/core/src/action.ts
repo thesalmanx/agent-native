@@ -541,6 +541,8 @@ interface DefineActionWithSchema<
   TReturn = any,
   TOutputSchema extends StandardSchemaV1 | undefined = undefined,
 > {
+  /** Optional human-facing tool title used by WebMCP and MCP hosts. */
+  title?: string;
   description: string;
   /** Standard Schema-compatible schema (Zod, Valibot, ArkType). Provides runtime
    *  validation and full TypeScript type inference for `run()` args. The schema is
@@ -785,6 +787,8 @@ interface DefineActionWithParams<
     | undefined,
   TReturn = any,
 > {
+  /** Optional human-facing tool title used by WebMCP and MCP hosts. */
+  title?: string;
   description: string;
   /** Flat map of parameter names to their schema. Automatically wrapped in
    *  `{ type: "object", properties: ... }` for the Claude API. */
@@ -1183,6 +1187,9 @@ export function defineAction(options: any) {
 
   return {
     tool: {
+      ...(typeof options.title === "string" && options.title.trim()
+        ? { title: options.title.trim() }
+        : {}),
       description: options.description,
       parameters: toolParameters,
     },

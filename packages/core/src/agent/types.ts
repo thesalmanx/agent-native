@@ -29,6 +29,7 @@ export interface AgentNativeJsonSchema {
 }
 
 export interface ActionTool {
+  title?: string;
   description: string;
   parameters?: AgentNativeJsonSchema & {
     type: "object";
