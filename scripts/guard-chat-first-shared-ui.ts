@@ -71,9 +71,9 @@ const chatRouteViolations = [
   !chatHomeRoute.includes("navigate(`/chat/")
     ? "Chat /home must settle a durable thread URL before the runtime can mount"
     : null,
-  !chatThreadRoute.includes("lazy(") ||
+  !chatThreadRoute.includes("useEffect") ||
   !chatThreadRoute.includes('import("@/components/chat/ChatRouteContent")')
-    ? "Chat /chat/:threadId must defer the interactive Chat surface until client rendering"
+    ? "Chat /chat/:threadId must defer the interactive Chat surface until client hydration"
     : null,
 ].filter((violation): violation is string => Boolean(violation));
 
