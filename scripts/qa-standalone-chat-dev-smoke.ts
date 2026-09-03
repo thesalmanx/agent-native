@@ -1001,86 +1001,24 @@ function isBenignHttpError(
   return false;
 }
 
-async function waitForHomeLink(
+async function waitForDurableChatRoute(
   page: Page,
   timeoutMs = shellTimeoutMs,
 ): Promise<void> {
-  const homeLink = page.getByRole("button", { name: /^New Chat$/i });
-  const deadline = Date.now() + timeoutMs;
-
-  while (Date.now() < deadline) {
-    if (await homeLink.isVisible().catch(() => false)) return;
-
-    const remaining = deadline - Date.now();
-    if (remaining <= 0) break;
-
-    try {
-      await homeLink.waitFor({
-        state: "visible",
-        timeout: Math.min(3_000, remaining),
-      });
-      return;
-    } catch (err) {
-      if (Date.now() >= deadline) break;
-      if (isNavigationContextError(err)) {
-        await sleep(1_000);
-        continue;
-      }
-      await sleep(1_000);
-    }
+  try {
+    await page.waitForURL(/\/chat\/chat-[^/]+$/, { timeout: timeoutMs });
+  } catch (err) {
+    const bodyPreview = await page
+      .locator("body")
+      .innerText({ timeout: 5_000 })
+      .catch(() => "");
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `Chat home handoff did not reach a durable thread within ${timeoutMs}ms: ${message}\n` +
+        `Current URL: ${page.url()}\n` +
+        `Body preview: ${bodyPreview.slice(0, 400)}`,
+    );
   }
-
-  const bodyPreview = await page
-    .locator("body")
-    .innerText({ timeout: 5_000 })
-    .catch(() => "");
-  throw new Error(
-    `Chat shell New Chat control not visible within ${timeoutMs}ms at ${page.url()}.\n` +
-      `Body preview: ${bodyPreview.slice(0, 400)}`,
-  );
-}
-
-async function waitForHomeLinkWithDurableRecovery(
-  page: Page,
-  timeoutMs = shellTimeoutMs,
-): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  let recoveryAttempts = 0;
-  let lastError: unknown;
-
-  while (Date.now() < deadline) {
-    try {
-      await waitForHomeLink(page, Math.min(15_000, deadline - Date.now()));
-      return;
-    } catch (err) {
-      lastError = err;
-      if (Date.now() >= deadline) break;
-
-      let current: URL;
-      try {
-        current = new URL(page.url());
-      } catch {
-        break;
-      }
-
-      if (!/^\/chat\/chat-[^/]+$/.test(current.pathname)) break;
-
-      recoveryAttempts += 1;
-      if (recoveryAttempts < 3) {
-        // The handoff may have committed the durable URL before React has
-        // finished mounting the shared shell. Re-navigating during that
-        // window aborts the module graph that would make the shell visible.
-        await sleep(1_000);
-        continue;
-      }
-      log(
-        `reloading the durable Chat thread after its lazy graph did not mount (attempt ${recoveryAttempts})`,
-      );
-      await gotoCommitted(page, current.href);
-    }
-  }
-
-  throw lastError;
 }
 
 async function readAuthenticatedSessionEmail(
@@ -1234,59 +1172,15 @@ async function waitForAuthenticatedShell(
   log(`navigating to ${baseUrl}/home (auto-login path)`);
   await gotoCommitted(page, `${baseUrl}/home`);
 
-  const homeLink = page.getByRole("button", { name: /^New Chat$/i });
-  const shellDeadline = Date.now() + shellTimeoutMs;
-
-  while (Date.now() < shellDeadline) {
-    if (await homeLink.isVisible().catch(() => false)) break;
-
-    const lastUrl = page.url();
-    const lastBody = await readBodyPreview(page);
-
-    if (lastBody.startsWith("<unreadable:")) {
-      // The original `/home` navigation already owns the auto-login and
-      // durable-thread handoff. Re-entering it here creates another thread on
-      // every cold-read retry and can starve the Chat module being loaded.
-      await sleep(1_000);
-      continue;
-    }
-
-    if (/^\/chat\/chat-[^/]+$/.test(new URL(lastUrl).pathname)) {
-      // The handoff has committed the durable URL even if the shell still
-      // reports its loading state. Let the durable recovery loop own the
-      // remaining timeout so it can observe the shared shell mounting.
-      break;
-    }
-
-    if (/unexpected server error/i.test(lastBody)) {
-      throw new Error(
-        `page rendered server error text at ${lastUrl}: ${lastBody.slice(0, 240)}`,
-      );
-    }
-
-    if (await homeLink.isVisible().catch(() => false)) break;
-
-    // Auto-login redirect or Vite reload in progress — poll, do not page.goto again.
-    await sleep(2_000);
-  }
-
   await waitForViteDepsQuiet(running.viteReload, serverLogs);
-  // Vite warmup and the `/home` handoff consume the initial shell budget.
-  // Durable recovery is a separate document-mount phase and needs its own
-  // timeout; carrying the old deadline forward can leave only a few seconds
-  // to mount the shared Chat shell.
-  await waitForHomeLinkWithDurableRecovery(page, shellTimeoutMs);
+  await waitForDurableChatRoute(page, shellTimeoutMs);
 
   const sessionEmail = await readAuthenticatedSessionEmail(page, baseUrl);
   log(`authenticated session: ${sessionEmail}`);
 
   log(`navigating to ${baseUrl}/ (public shell handoff)`);
   await gotoCommitted(page, `${baseUrl}/`);
-  // A cold durable handoff can take longer than a locator poll. Re-navigating
-  // here aborts the in-flight action and starts another thread creation, so
-  // wait on the one navigation we deliberately initiated above.
-  await waitForHomeLinkWithDurableRecovery(page, shellTimeoutMs);
-  await page.waitForURL(/\/chat\/chat-[^/]+$/, { timeout: shellTimeoutMs });
+  await waitForDurableChatRoute(page, shellTimeoutMs);
   assert.match(
     new URL(page.url()).pathname,
     /^\/chat\/chat-[^/]+$/,
