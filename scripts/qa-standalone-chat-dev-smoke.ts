@@ -1140,23 +1140,12 @@ async function waitForChatPage(
         );
       }
 
-      // A durable handoff can leave Playwright observing the old document
-      // while the browser is still resolving the new one. Waiting on locators
-      // alone never advances a misdirected URL, but reloading a URL whose
-      // document is already in flight aborts the lazy graph and can leave the
-      // Chat surface permanently unhydrated. Only re-commit when the browser
-      // is actually on a different path; an unreadable matching document gets
-      // time to finish its navigation and lazy graph within this deadline.
-      let currentPath = "";
-      try {
-        currentPath = new URL(page.url()).pathname;
-      } catch {
-        // The browser has no committed URL yet; gotoCommitted below will
-        // establish the requested document.
-      }
-      if (currentPath !== path) {
-        await gotoCommitted(page, new URL(path, running.baseUrl).href);
-      }
+      // The `/home` route hands off to a durable chat route with client-side
+      // navigation. A matching durable URL can be committed before its lazy
+      // route graph mounts, and a different durable URL can be the final
+      // result when the handoff is replayed during dev hydration. Starting a
+      // second page navigation here aborts the graph that would render Chat;
+      // keep observing the browser's in-flight handoff instead.
       await sleep(2_000);
     }
   }
