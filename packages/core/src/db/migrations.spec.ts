@@ -125,6 +125,38 @@ describe("runMigrations – SQLite steady-state (no pending migrations)", () => 
     // createDbExec must NOT be called for SQLite
     expect(createDbExec).not.toHaveBeenCalled();
   });
+
+  it("serializes concurrent runners for the same bookkeeping table", async () => {
+    vi.mocked(isPostgres).mockReturnValue(false);
+    const exec = makeExec([{ v: 0 }]);
+    let active = 0;
+    let maxActive = 0;
+    exec.execute.mockImplementation(async (sql) => {
+      active++;
+      maxActive = Math.max(maxActive, active);
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      active--;
+      const statement = typeof sql === "string" ? sql : sql.sql;
+      if (/SELECT MAX/i.test(statement))
+        return { rows: [{ v: 0 }], rowsAffected: 0 };
+      return { rows: [], rowsAffected: 0 };
+    });
+    vi.mocked(getDbExec).mockReturnValue(exec);
+
+    const migrations = [
+      { version: 1, sql: "CREATE TABLE serialized (id INTEGER PRIMARY KEY)" },
+    ];
+    const plugin1 = runMigrations(migrations, {
+      table: "serialized_migrations",
+    });
+    const plugin2 = runMigrations(migrations, {
+      table: "serialized_migrations",
+    });
+
+    await Promise.all([plugin1(null), plugin2(null)]);
+
+    expect(maxActive).toBe(1);
+  });
 });
 
 describe("runMigrations – serverless request runtime", () => {
