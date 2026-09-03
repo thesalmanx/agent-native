@@ -1134,10 +1134,11 @@ async function waitForChatPage(
 
       // A durable handoff can leave Playwright observing the old document
       // while the browser is still resolving the new one. Waiting on locators
-      // alone never advances that state, and the aborted document can retain
-      // hundreds of in-flight client probes. Re-commit the expected durable
-      // URL only for that unreadable/misdirected state; a rendered fallback
-      // gets time to finish its lazy graph without being needlessly remounted.
+      // alone never advances a misdirected URL, but reloading a URL whose
+      // document is already in flight aborts the lazy graph and can leave the
+      // Chat surface permanently unhydrated. Only re-commit when the browser
+      // is actually on a different path; an unreadable matching document gets
+      // time to finish its navigation and lazy graph within this deadline.
       let currentPath = "";
       try {
         currentPath = new URL(page.url()).pathname;
@@ -1145,7 +1146,7 @@ async function waitForChatPage(
         // The browser has no committed URL yet; gotoCommitted below will
         // establish the requested document.
       }
-      if (lastBody.startsWith("<unreadable:") || currentPath !== path) {
+      if (currentPath !== path) {
         await gotoCommitted(page, new URL(path, running.baseUrl).href);
       }
       await sleep(2_000);
