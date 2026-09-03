@@ -14,25 +14,48 @@ function ChatRouteFallback() {
 let chatRouteContentPromise:
   | Promise<typeof import("@/components/chat/ChatRouteContent")>
   | undefined;
+const maxChatRouteContentLoadAttempts = 5;
 
 function loadChatRouteContent() {
-  return (chatRouteContentPromise ??=
+  const promise = (chatRouteContentPromise ??=
     import("@/components/chat/ChatRouteContent"));
+  return promise.catch((error: unknown) => {
+    chatRouteContentPromise = undefined;
+    throw error;
+  });
 }
 
 function ClientChatRoute() {
   const [ChatRouteContent, setChatRouteContent] =
     useState<ComponentType | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [loadError, setLoadError] = useState<unknown>(null);
 
   useEffect(() => {
     let cancelled = false;
-    void loadChatRouteContent().then((module) => {
-      if (!cancelled) setChatRouteContent(() => module.default);
-    });
+    let retryTimer: number | undefined;
+    void loadChatRouteContent()
+      .then((module) => {
+        if (!cancelled) setChatRouteContent(() => module.default);
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          if (loadAttempt >= maxChatRouteContentLoadAttempts - 1) {
+            setLoadError(error);
+            return;
+          }
+          retryTimer = window.setTimeout(() => {
+            if (!cancelled) setLoadAttempt((attempt) => attempt + 1);
+          }, 250);
+        }
+      });
     return () => {
       cancelled = true;
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
     };
-  }, []);
+  }, [loadAttempt]);
+
+  if (loadError) throw loadError;
 
   return ChatRouteContent ? <ChatRouteContent /> : <ChatRouteFallback />;
 }
