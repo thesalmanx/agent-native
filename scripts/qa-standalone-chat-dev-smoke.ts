@@ -1039,6 +1039,42 @@ async function waitForHomeLink(
   );
 }
 
+async function waitForHomeLinkWithDurableRecovery(
+  page: Page,
+  timeoutMs = shellTimeoutMs,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  let recovered = false;
+  let lastError: unknown;
+
+  while (Date.now() < deadline) {
+    try {
+      await waitForHomeLink(page, Math.min(15_000, deadline - Date.now()));
+      return;
+    } catch (err) {
+      lastError = err;
+      if (recovered || Date.now() >= deadline) break;
+
+      let current: URL;
+      try {
+        current = new URL(page.url());
+      } catch {
+        break;
+      }
+
+      if (!/^\/chat\/chat-[^/]+$/.test(current.pathname)) break;
+
+      recovered = true;
+      log(
+        "reloading the durable Chat thread after its initial lazy graph did not mount",
+      );
+      await gotoCommitted(page, current.href);
+    }
+  }
+
+  throw lastError;
+}
+
 async function readAuthenticatedSessionEmail(
   page: Page,
   baseUrl: string,
@@ -1216,7 +1252,7 @@ async function waitForAuthenticatedShell(
   // A cold durable handoff can take longer than a locator poll. Re-navigating
   // here aborts the in-flight action and starts another thread creation, so
   // wait on the one navigation we deliberately initiated above.
-  await waitForHomeLink(page, shellTimeoutMs);
+  await waitForHomeLinkWithDurableRecovery(page, shellTimeoutMs);
   await page.waitForURL(/\/chat\/chat-[^/]+$/, { timeout: shellTimeoutMs });
   assert.match(
     new URL(page.url()).pathname,
