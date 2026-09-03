@@ -7,7 +7,6 @@ import {
   unregisterFileUploadProvider,
 } from "../file-upload/index.js";
 import type { FileUploadProvider } from "../file-upload/types.js";
-import type { H3AppShim } from "./framework-request-handler.js";
 import {
   BUILDER_CONNECT_PARAM,
   createBuilderConnectState,
@@ -37,6 +36,7 @@ import {
   ensureS3FileUploadProvider,
   mountApplicationStateRoutes,
 } from "./core-routes-plugin.js";
+import type { H3AppShim } from "./framework-request-handler.js";
 
 describe("mountApplicationStateRoutes", () => {
   it("registers the compose matcher before generic application state", () => {
