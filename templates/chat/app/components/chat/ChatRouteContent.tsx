@@ -5,23 +5,29 @@ import type {
 import {
   AgentConnectionRequestCard,
   AgentKitChat,
-  AgentKitRoot,
+} from "@agent-native/agentkit/react/components";
+import {
   useAgentKit,
   useAgentKitControl,
   useAgentThread,
   type AgentKitRenderProps,
-} from "@agent-native/agentkit/react";
+} from "@agent-native/agentkit/react/context";
+import { AgentKitRoot } from "@agent-native/agentkit/react/root";
+import { CoreComposerRuntimeProvider } from "@agent-native/core/client/agentkit-chat/composer";
 import {
-  createAgentNativeAgentKitTransport,
-  CoreComposerRuntimeProvider,
-  GuidedQuestionFlow,
-  findMcpConnectionSuggestionIntegration,
-  markAgentChatHomeHandoff,
   McpAgentKitConnectionRequestCard,
   McpAgentKitConnectionResume,
-  McpConnectionSuggestion,
+} from "@agent-native/core/client/agentkit-chat/connections";
+import {
+  GuidedQuestionFlow,
   useGuidedQuestionFlow,
-} from "@agent-native/core/client/agentkit-chat";
+} from "@agent-native/core/client/agentkit-chat/questions";
+import { markAgentChatHomeHandoff } from "@agent-native/core/client/agentkit-chat/rail";
+import {
+  findMcpConnectionSuggestionIntegration,
+  McpConnectionSuggestion,
+} from "@agent-native/core/client/agentkit-chat/suggestions";
+import { createAgentNativeAgentKitTransport } from "@agent-native/core/client/agentkit-chat/transport";
 import { useT } from "@agent-native/core/client/i18n";
 import { IconLayoutSidebarRight } from "@tabler/icons-react";
 import { useCallback, useEffect, useState, type ReactNode } from "react";

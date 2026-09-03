@@ -41,32 +41,35 @@ vi.mock("@agent-native/core/client/agentkit-chat/rail", () => ({
   markAgentChatHomeHandoff: markHandoff,
 }));
 
-vi.mock("@agent-native/core/client/agentkit-chat", () => ({
+vi.mock("@agent-native/core/client/agentkit-chat/composer", () => ({
   CoreComposerRuntimeProvider: ({
     children,
   }: {
     children: React.ReactNode;
   }) => <div data-core-composer-runtime="">{children}</div>,
-  createAgentNativeAgentKitTransport: createTransport,
-  findMcpConnectionSuggestionIntegration: () => null,
-  GuidedQuestionFlow: () => null,
-  markAgentChatHomeHandoff: markHandoff,
+}));
+vi.mock("@agent-native/core/client/agentkit-chat/connections", () => ({
   McpAgentKitConnectionRequestCard: () => null,
   McpAgentKitConnectionResume: () => null,
-  McpConnectionSuggestion: () => null,
+}));
+vi.mock("@agent-native/core/client/agentkit-chat/questions", () => ({
+  GuidedQuestionFlow: () => null,
   useGuidedQuestionFlow: () => ({
     questions: null,
     handleSubmit: vi.fn(),
     handleSkip: vi.fn(),
   }),
 }));
+vi.mock("@agent-native/core/client/agentkit-chat/suggestions", () => ({
+  findMcpConnectionSuggestionIntegration: () => null,
+  McpConnectionSuggestion: () => null,
+}));
+vi.mock("@agent-native/core/client/agentkit-chat/transport", () => ({
+  createAgentNativeAgentKitTransport: createTransport,
+}));
 
-vi.mock("@agent-native/agentkit/react", () => ({
+vi.mock("@agent-native/agentkit/react/components", () => ({
   AgentConnectionRequestCard: () => null,
-  AgentKitRoot: (props: Record<string, unknown>) => {
-    routeState.rootProps = props;
-    return <>{props.children as React.ReactNode}</>;
-  },
   AgentKitChat: (props: Record<string, unknown>) => {
     routeState.chatProps = props;
     return (
@@ -77,10 +80,8 @@ vi.mock("@agent-native/agentkit/react", () => ({
       </div>
     );
   },
-  useAgentThread: () => ({
-    messages: routeState.messages,
-    thread: routeState.title ? { title: routeState.title } : undefined,
-  }),
+}));
+vi.mock("@agent-native/agentkit/react/context", () => ({
   useAgentKit: () => ({
     threadId: routeState.threadId ?? "new-thread",
     controller: {
@@ -91,6 +92,16 @@ vi.mock("@agent-native/agentkit/react", () => ({
   useAgentKitControl: () => ({
     resolveConnectionRequest: routeState.resolveConnectionRequest,
   }),
+  useAgentThread: () => ({
+    messages: routeState.messages,
+    thread: routeState.title ? { title: routeState.title } : undefined,
+  }),
+}));
+vi.mock("@agent-native/agentkit/react/root", () => ({
+  AgentKitRoot: (props: Record<string, unknown>) => {
+    routeState.rootProps = props;
+    return <>{props.children as React.ReactNode}</>;
+  },
 }));
 
 vi.mock("@agent-native/core/client/i18n", () => ({

@@ -28,6 +28,26 @@
       "types": "./dist/headless.d.ts",
       "import": "./dist/headless.js"
     },
+    "./chat": {
+      "types": "./dist/chat.d.ts",
+      "import": "./dist/chat.js"
+    },
+    "./components": {
+      "types": "./dist/components.d.ts",
+      "import": "./dist/components.js"
+    },
+    "./context": {
+      "types": "./dist/context.d.ts",
+      "import": "./dist/context.js"
+    },
+    "./root": {
+      "types": "./dist/root.d.ts",
+      "import": "./dist/root.js"
+    },
+    "./streaming-text": {
+      "types": "./dist/streaming-text.d.ts",
+      "import": "./dist/streaming-text.js"
+    },
     "./styles.css": "./dist/styles.css"
   },
   "publishConfig": {
