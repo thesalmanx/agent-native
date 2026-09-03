@@ -1196,6 +1196,13 @@ async function waitForAuthenticatedShell(
     "authenticated public root should hand off to a durable Chat thread",
   );
 
+  // The public shell handoff uses client navigation, which can leave the
+  // browser URL committed before the deferred Chat route document has had a
+  // chance to finish loading its module graph. Commit the durable document
+  // once here so the following readiness check observes the actual Chat route,
+  // not a canceled handoff navigation.
+  await gotoCommitted(page, new URL(durableThreadPath, baseUrl).href);
+
   return durableThreadPath;
 }
 
