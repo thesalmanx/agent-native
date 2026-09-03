@@ -1251,6 +1251,13 @@ async function waitForAuthenticatedShell(
       continue;
     }
 
+    if (/^\/chat\/chat-[^/]+$/.test(new URL(lastUrl).pathname)) {
+      // The handoff has committed the durable URL even if the shell still
+      // reports its loading state. Let the durable recovery loop own the
+      // remaining timeout so it can observe the shared shell mounting.
+      break;
+    }
+
     if (/unexpected server error/i.test(lastBody)) {
       throw new Error(
         `page rendered server error text at ${lastUrl}: ${lastBody.slice(0, 240)}`,
