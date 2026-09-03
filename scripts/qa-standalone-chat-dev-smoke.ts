@@ -886,6 +886,17 @@ async function gotoCommitted(
         const requested = new URL(url);
         if (
           current.origin === requested.origin &&
+          current.pathname === requested.pathname &&
+          current.search === requested.search &&
+          current.hash === requested.hash
+        ) {
+          // A client-side handoff can commit the destination URL before the
+          // document navigation settles. Starting another navigation to the
+          // same path cancels the lazy route graph we are waiting to load.
+          return;
+        }
+        if (
+          current.origin === requested.origin &&
           (requested.pathname === "/" || requested.pathname === "/home") &&
           /^\/chat\/chat-[^/]+$/.test(current.pathname)
         ) {
