@@ -1066,6 +1066,13 @@ async function waitForHomeLinkWithDurableRecovery(
       if (!/^\/chat\/chat-[^/]+$/.test(current.pathname)) break;
 
       recoveryAttempts += 1;
+      if (recoveryAttempts < 3) {
+        // The handoff may have committed the durable URL before React has
+        // finished mounting the shared shell. Re-navigating during that
+        // window aborts the module graph that would make the shell visible.
+        await sleep(1_000);
+        continue;
+      }
       log(
         `reloading the durable Chat thread after its lazy graph did not mount (attempt ${recoveryAttempts})`,
       );
