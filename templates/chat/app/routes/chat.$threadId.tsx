@@ -1,6 +1,4 @@
-import { ClientOnly } from "@agent-native/core/client/ui";
-
-import ChatRouteContent from "@/components/chat/ChatRouteContent";
+import { useEffect, useState, type ComponentType } from "react";
 
 function ChatRouteFallback() {
   return (
@@ -13,12 +11,34 @@ function ChatRouteFallback() {
   );
 }
 
+let chatRouteContentPromise:
+  | Promise<typeof import("@/components/chat/ChatRouteContent")>
+  | undefined;
+
+function loadChatRouteContent() {
+  return (chatRouteContentPromise ??=
+    import("@/components/chat/ChatRouteContent"));
+}
+
+function ClientChatRoute() {
+  const [ChatRouteContent, setChatRouteContent] =
+    useState<ComponentType | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadChatRouteContent().then((module) => {
+      if (!cancelled) setChatRouteContent(() => module.default);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return ChatRouteContent ? <ChatRouteContent /> : <ChatRouteFallback />;
+}
+
 export { meta } from "./home";
 
 export default function ChatThreadRoute() {
-  return (
-    <ClientOnly fallback={<ChatRouteFallback />}>
-      <ChatRouteContent />
-    </ClientOnly>
-  );
+  return <ClientChatRoute />;
 }
