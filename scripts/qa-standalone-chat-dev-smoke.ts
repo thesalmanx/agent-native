@@ -1186,6 +1186,23 @@ async function waitForChatPage(
           `[standalone-dev-smoke] ${path} not ready yet: ${message.split("\n")[0]}`,
         );
       }
+
+      // A durable handoff can leave Playwright observing the old document
+      // while the browser is still resolving the new one. Waiting on locators
+      // alone never advances that state, and the aborted document can retain
+      // hundreds of in-flight client probes. Re-commit the expected durable
+      // URL only for that unreadable/misdirected state; a rendered fallback
+      // gets time to finish its lazy graph without being needlessly remounted.
+      let currentPath = "";
+      try {
+        currentPath = new URL(page.url()).pathname;
+      } catch {
+        // The browser has no committed URL yet; gotoCommitted below will
+        // establish the requested document.
+      }
+      if (lastBody.startsWith("<unreadable:") || currentPath !== path) {
+        await gotoCommitted(page, new URL(path, running.baseUrl).href);
+      }
       await sleep(2_000);
     }
   }
