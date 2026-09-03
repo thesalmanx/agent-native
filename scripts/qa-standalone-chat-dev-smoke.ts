@@ -98,6 +98,7 @@ const nodeBin = process.execPath;
 const installTimeoutMs = Number(
   process.env.AGENTKIT_ACCEPTANCE_INSTALL_TIMEOUT_MS || 300_000,
 );
+const durableChatPathPattern = /^\/chat\/[^/]+$/;
 
 type ApiResponseShape = {
   ok: boolean | (() => boolean);
@@ -1004,9 +1005,12 @@ function isBenignHttpError(
 async function waitForDurableChatRoute(
   page: Page,
   timeoutMs = shellTimeoutMs,
-): Promise<void> {
+): Promise<string> {
   try {
-    await page.waitForURL(/\/chat\/chat-[^/]+$/, { timeout: timeoutMs });
+    await page.waitForURL((url) => durableChatPathPattern.test(url.pathname), {
+      timeout: timeoutMs,
+    });
+    return new URL(page.url()).pathname;
   } catch (err) {
     const bodyPreview = await page
       .locator("body")
@@ -1185,14 +1189,14 @@ async function waitForAuthenticatedShell(
 
   log(`navigating to ${baseUrl}/ (public shell handoff)`);
   await gotoCommitted(page, `${baseUrl}/`);
-  await waitForDurableChatRoute(page, shellTimeoutMs);
+  const durableThreadPath = await waitForDurableChatRoute(page, shellTimeoutMs);
   assert.match(
-    new URL(page.url()).pathname,
-    /^\/chat\/chat-[^/]+$/,
+    durableThreadPath,
+    durableChatPathPattern,
     "authenticated public root should hand off to a durable Chat thread",
   );
 
-  return sessionEmail;
+  return durableThreadPath;
 }
 
 const helloPrompt =
@@ -2191,11 +2195,14 @@ async function runBrowserSmoke(
   const baseUrl = running.baseUrl;
   // Warmup covers `/` + auto-login + Vite quiet + authenticated session.
   log("warmup: auto-login, Vite dep quiet, authenticated /");
-  await waitForAuthenticatedShell(page, baseUrl, running);
-  const durableThreadPath = new URL(page.url()).pathname;
+  const durableThreadPath = await waitForAuthenticatedShell(
+    page,
+    baseUrl,
+    running,
+  );
   assert.match(
     durableThreadPath,
-    /^\/chat\/chat-[^/]+$/,
+    durableChatPathPattern,
     "authenticated warmup must establish a durable Chat thread",
   );
 
