@@ -114,8 +114,7 @@
 }
 
 :where(.dark) .agentkit-composer[data-agent-composer-slot="root"],
-:where(.dark)
-  .agentkit-composer[data-agent-composer-slot="root"]:focus-within {
+:where(.dark) .agentkit-composer[data-agent-composer-slot="root"]:focus-within {
   border-color: transparent !important;
 }
 
