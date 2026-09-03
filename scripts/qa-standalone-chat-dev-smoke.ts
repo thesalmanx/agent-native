@@ -1271,10 +1271,11 @@ async function waitForAuthenticatedShell(
   }
 
   await waitForViteDepsQuiet(running.viteReload, serverLogs);
-  await waitForHomeLinkWithDurableRecovery(
-    page,
-    Math.max(isCi ? 60_000 : 15_000, shellDeadline - Date.now()),
-  );
+  // Vite warmup and the `/home` handoff consume the initial shell budget.
+  // Durable recovery is a separate document-mount phase and needs its own
+  // timeout; carrying the old deadline forward can leave only a few seconds
+  // to mount the shared Chat shell.
+  await waitForHomeLinkWithDurableRecovery(page, shellTimeoutMs);
 
   const sessionEmail = await readAuthenticatedSessionEmail(page, baseUrl);
   log(`authenticated session: ${sessionEmail}`);
