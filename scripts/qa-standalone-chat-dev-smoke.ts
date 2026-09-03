@@ -1011,7 +1011,11 @@ async function waitForDurableChatRoute(
     const bodyPreview = await page
       .locator("body")
       .innerText({ timeout: 5_000 })
-      .catch(() => "");
+      .catch((bodyError: unknown) => {
+        const message =
+          bodyError instanceof Error ? bodyError.message : String(bodyError);
+        return `<unreadable: ${message.split("\n")[0]}>`;
+      });
     const message = err instanceof Error ? err.message : String(err);
     throw new Error(
       `Chat home handoff did not reach a durable thread within ${timeoutMs}ms: ${message}\n` +
