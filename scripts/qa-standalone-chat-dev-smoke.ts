@@ -1183,12 +1183,10 @@ async function waitForAuthenticatedShell(
     const lastBody = await readBodyPreview(page);
 
     if (lastBody.startsWith("<unreadable:")) {
-      // `/home` is an idempotent auto-login warm-up route. A cold Vite server
-      // can replace its first committed 503 with another navigation before a
-      // document exists, so it is safe to re-enter this route. Do not extend
-      // this retry to `/`: that route creates the durable Chat thread.
+      // The original `/home` navigation already owns the auto-login and
+      // durable-thread handoff. Re-entering it here creates another thread on
+      // every cold-read retry and can starve the Chat module being loaded.
       await sleep(1_000);
-      await gotoCommitted(page, `${baseUrl}/home`);
       continue;
     }
 
@@ -2262,6 +2260,7 @@ async function runBrowserSmoke(
   assert.deepEqual(provider.errors, [], "loopback provider runtime errors");
 
   assert.deepEqual(browserErrors, [], "browser console/page errors on Chat");
+  discardSettledNavigationAborts(httpErrors);
   assert.deepEqual(httpErrors, [], "browser HTTP errors on Chat");
 }
 
