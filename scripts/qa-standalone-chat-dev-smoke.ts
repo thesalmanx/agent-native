@@ -16,8 +16,8 @@
  *
  * CI flake strategy (do not fight Vite first-load dep optimization):
  * 1. Poll the unauthenticated JSON API from process launch until it returns 401.
- * 2. One page.goto to `/home` so local auto-login runs before the public shell.
- * 3. Navigate to `/` and verify the authenticated client handoff to a durable thread.
+ * 2. One page.goto to `/home` so local auto-login runs before the Chat handoff.
+ * 3. Verify the authenticated `/home` handoff to a durable Chat thread.
  * 4. waitForViteDepsQuiet(server logs) before strict assertions.
  * 5. Retry goto/evaluate only for known Vite startup responses and transient
  *    Playwright navigation errors.
@@ -886,17 +886,6 @@ async function gotoCommitted(
         const requested = new URL(url);
         if (
           current.origin === requested.origin &&
-          current.pathname === requested.pathname &&
-          current.search === requested.search &&
-          current.hash === requested.hash
-        ) {
-          // A client-side handoff can commit the destination URL before the
-          // document navigation settles. Starting another navigation to the
-          // same path cancels the lazy route graph we are waiting to load.
-          return;
-        }
-        if (
-          current.origin === requested.origin &&
           (requested.pathname === "/" || requested.pathname === "/home") &&
           /^\/chat\/chat-[^/]+$/.test(current.pathname)
         ) {
@@ -1193,26 +1182,15 @@ async function waitForAuthenticatedShell(
   await gotoCommitted(page, `${baseUrl}/home`);
 
   await waitForViteDepsQuiet(running.viteReload, serverLogs);
-  await waitForDurableChatRoute(page, shellTimeoutMs);
-
-  const sessionEmail = await readAuthenticatedSessionEmail(page, baseUrl);
-  log(`authenticated session: ${sessionEmail}`);
-
-  log(`navigating to ${baseUrl}/ (public shell handoff)`);
-  await gotoCommitted(page, `${baseUrl}/`);
   const durableThreadPath = await waitForDurableChatRoute(page, shellTimeoutMs);
   assert.match(
     durableThreadPath,
     durableChatPathPattern,
-    "authenticated public root should hand off to a durable Chat thread",
+    "authenticated Chat home should hand off to a durable Chat thread",
   );
 
-  // The public shell handoff uses client navigation, which can leave the
-  // browser URL committed before the deferred Chat route document has had a
-  // chance to finish loading its module graph. Commit the durable document
-  // once here so the following readiness check observes the actual Chat route,
-  // not a canceled handoff navigation.
-  await gotoCommitted(page, new URL(durableThreadPath, baseUrl).href);
+  const sessionEmail = await readAuthenticatedSessionEmail(page, baseUrl);
+  log(`authenticated session: ${sessionEmail}`);
 
   return durableThreadPath;
 }
@@ -2211,8 +2189,8 @@ async function runBrowserSmoke(
   httpErrors: string[],
 ): Promise<void> {
   const baseUrl = running.baseUrl;
-  // Warmup covers `/` + auto-login + Vite quiet + authenticated session.
-  log("warmup: auto-login, Vite dep quiet, authenticated /");
+  // Warmup covers `/home` auto-login and the authenticated Chat handoff.
+  log("warmup: auto-login, Vite dep quiet, authenticated /home");
   const durableThreadPath = await waitForAuthenticatedShell(
     page,
     baseUrl,
@@ -2438,7 +2416,7 @@ async function main(): Promise<void> {
     console.log(`  url:      ${running.baseUrl}`);
     console.log(`  app:      ${appDir}`);
     console.log(
-      "  checked:  scaffold → install → dev server → /home auth → / handoff → durable Chat thread",
+      "  checked:  scaffold → install → dev server → /home auth → Chat handoff → durable Chat thread",
     );
     console.log(
       "  checked:  unauthenticated startup poll recovers to HTTP 401",
