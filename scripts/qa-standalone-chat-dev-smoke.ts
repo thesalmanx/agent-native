@@ -885,6 +885,7 @@ async function gotoCommitted(
         const requested = new URL(url);
         if (
           current.origin === requested.origin &&
+          (requested.pathname === "/" || requested.pathname === "/home") &&
           /^\/chat\/chat-[^/]+$/.test(current.pathname)
         ) {
           return;
