@@ -40,6 +40,7 @@ export function validateReusableWorkflowConcurrency(
   if (
     typeof group !== "string" ||
     !group.includes("inputs.caller") ||
+    !group.includes("inputs.source_ref") ||
     !group.includes("netlify-prebuilt-child") ||
     !group.includes("inputs.target") ||
     !group.includes("inputs.site") ||
@@ -201,13 +202,13 @@ try {
 const reusableDocument = parsedWorkflows.get(reusablePath);
 issues.push(...validateReusableWorkflowConcurrency(reusableDocument ?? {}));
 
-for (const [path, document] of [
-  [reusablePath, reusableDocument],
-  [betaPath, parsedWorkflows.get(betaPath)],
-] as const) {
-  if (asRecord(document?.concurrency)?.["cancel-in-progress"] !== false) {
-    issues.push(`${path} beta deploys must queue every source SHA`);
-  }
+if (asRecord(reusableDocument?.concurrency)?.["cancel-in-progress"] !== false) {
+  issues.push(`${reusablePath} beta deploys must queue every source SHA`);
+}
+if (asRecord(parsedWorkflows.get(betaPath)?.concurrency)) {
+  issues.push(
+    `${betaPath} must not use a shared workflow concurrency group; GitHub keeps only one pending run per group`,
+  );
 }
 
 const productionConcurrency = asRecord(
@@ -610,6 +611,28 @@ for (const [path, target, buildContext] of [
   if (deployWith?.caller !== "fleet") {
     issues.push(
       `${path} deploy job must explicitly select the reusable workflow child queue`,
+    );
+  }
+  if (
+    path === betaPath &&
+    asRecord(deployJob?.strategy)?.["max-parallel"] !== 1
+  ) {
+    issues.push(
+      `${path} must serialize beta builds because release migrations share database capacity`,
+    );
+  }
+}
+
+for (const required of [
+  "context.runId",
+  "run.id < context.runId",
+  "run.event",
+  "workflow_dispatch",
+  "actions.getWorkflowRun",
+] as const) {
+  if (!beta.includes(required)) {
+    issues.push(
+      `${betaPath} must queue push and manual beta runs behind the prior workflow run (${required})`,
     );
   }
 }
