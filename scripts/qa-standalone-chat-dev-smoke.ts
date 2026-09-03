@@ -1239,7 +1239,7 @@ async function waitForAuthenticatedShell(
   }
 
   await waitForViteDepsQuiet(running.viteReload, serverLogs);
-  await waitForHomeLink(
+  await waitForHomeLinkWithDurableRecovery(
     page,
     Math.max(isCi ? 60_000 : 15_000, shellDeadline - Date.now()),
   );
