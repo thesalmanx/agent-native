@@ -1634,7 +1634,10 @@ async function createDbExecInternal(
         );
       },
       async close() {
-        await closePgliteClient(url);
+        // PGlite clients are cached by data directory so the Drizzle stores,
+        // auth adapter, and DbExec surface share one process-local client. A
+        // migration exec therefore cannot close it without invalidating the
+        // singleton that may run immediately after the migration.
       },
     };
   }
