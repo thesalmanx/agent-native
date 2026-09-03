@@ -1045,7 +1045,7 @@ async function waitForHomeLinkWithDurableRecovery(
   timeoutMs = shellTimeoutMs,
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs;
-  let recovered = false;
+  let recoveryAttempts = 0;
   let lastError: unknown;
 
   while (Date.now() < deadline) {
@@ -1054,7 +1054,7 @@ async function waitForHomeLinkWithDurableRecovery(
       return;
     } catch (err) {
       lastError = err;
-      if (recovered || Date.now() >= deadline) break;
+      if (Date.now() >= deadline) break;
 
       let current: URL;
       try {
@@ -1065,9 +1065,9 @@ async function waitForHomeLinkWithDurableRecovery(
 
       if (!/^\/chat\/chat-[^/]+$/.test(current.pathname)) break;
 
-      recovered = true;
+      recoveryAttempts += 1;
       log(
-        "reloading the durable Chat thread after its initial lazy graph did not mount",
+        `reloading the durable Chat thread after its lazy graph did not mount (attempt ${recoveryAttempts})`,
       );
       await gotoCommitted(page, current.href);
     }
