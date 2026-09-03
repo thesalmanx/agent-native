@@ -102,6 +102,7 @@
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--agentkit-composer-border);
+  border-color: var(--agentkit-composer-border) !important;
   border-radius: var(--agentkit-radius);
   color: var(--agentkit-text);
   background: var(--agentkit-surface);
@@ -109,7 +110,13 @@
 }
 
 .agentkit-composer[data-agent-composer-slot="root"]:focus-within {
-  border-color: var(--agentkit-composer-focus-border);
+  border-color: var(--agentkit-composer-focus-border) !important;
+}
+
+:where(.dark) .agentkit-composer[data-agent-composer-slot="root"],
+:where(.dark)
+  .agentkit-composer[data-agent-composer-slot="root"]:focus-within {
+  border-color: transparent !important;
 }
 
 .agentkit-composer [data-agent-composer-slot="editor-wrap"] {
