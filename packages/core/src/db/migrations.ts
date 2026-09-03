@@ -59,6 +59,15 @@ async function withMigrationLock<T>(
   }
 }
 
+function isMissingMigrationTableError(error: unknown, table: string): boolean {
+  if (!(error instanceof Error)) return false;
+  const escapedTable = table.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(
+    `(?:no such table:?\\s*["'\`]?${escapedTable}|relation\\s+["'\`]?${escapedTable}["'\`]?\\s+does not exist)`,
+    "i",
+  ).test(error.message);
+}
+
 async function acquireMigrationExec(): Promise<DbExec> {
   if (!_migrationExecPromise) {
     const opened = createDbExec({ url: getMigrationDatabaseUrl() });
@@ -660,7 +669,8 @@ export function runMigrations(
               `SELECT MAX(version) as v FROM ${table}`,
             );
             current = (rows[0]?.v as number) ?? 0;
-          } catch {
+          } catch (err) {
+            if (!isMissingMigrationTableError(err, table)) throw err;
             // Table doesn't exist yet — leave current = -1 so all migrations apply.
           }
           if (hasNamedMigrations) {
@@ -669,7 +679,8 @@ export function runMigrations(
                 `SELECT name FROM ${namedTable}`,
               );
               appliedNames = new Set(rows.map((r) => String(r.name)));
-            } catch {
+            } catch (err) {
+              if (!isMissingMigrationTableError(err, namedTable)) throw err;
               // Named table doesn't exist yet — leave appliedNames empty so all
               // named migrations apply.
               namedRowsMissing = true;
